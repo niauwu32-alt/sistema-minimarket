@@ -33,7 +33,7 @@ export default function App() {
           onClick={async () => {
             const { error } = await supabase.auth.signInWithPassword({
               email: 'niauwu32@gmail.com',
-              password: 'TU_PASSWORD_REAL'
+              password: 'Dkbn4f4v8vgRxXXw'
             })
             if (error) alert(error.message)
           }}
