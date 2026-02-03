@@ -1,94 +1,151 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 
-export default function Sales({ profile, onSaleDone }) {
+export default function Sales({ profile }) {
   const [barcode, setBarcode] = useState('')
   const [products, setProducts] = useState({})
   const [cart, setCart] = useState([])
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    const loadProducts = async () => {
-      const { data } = await supabase
-        .from('products')
-        .select('*')
+  // 🔹 cargar productos siempre actualizados
+  const loadProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
 
+    if (!error && data) {
       const map = {}
-      data?.forEach(p => (map[p.barcode] = p))
+      data.forEach(p => {
+        map[p.barcode] = p
+      })
       setProducts(map)
     }
+  }
 
+  useEffect(() => {
     loadProducts()
   }, [])
 
+  // 🔹 agregar producto al carrito
   const addToCart = () => {
-    const p = products[barcode]
-    if (!p) {
-      alert('Producto no encontrado')
+    const product = products[barcode]
+
+    if (!product) {
+      alert('❌ Producto no encontrado')
       return
     }
 
-    const existing = cart.find(i => i.id === p.id)
+    if (product.stock <= 0) {
+      alert('❌ Sin stock')
+      return
+    }
+
+    const existing = cart.find(i => i.id === product.id)
 
     if (existing) {
+      if (existing.quantity + 1 > product.stock) {
+        alert('❌ Stock insuficiente')
+        return
+      }
+
       setCart(
         cart.map(i =>
-          i.id === p.id
+          i.id === product.id
             ? { ...i, quantity: i.quantity + 1 }
             : i
         )
       )
     } else {
-      setCart([...cart, { ...p, quantity: 1 }])
+      setCart([...cart, { ...product, quantity: 1 }])
     }
 
     setBarcode('')
   }
 
+  // 🔹 quitar producto del carrito
+  const removeFromCart = (id) => {
+    setCart(cart.filter(i => i.id !== id))
+  }
+
+  // 🔹 total
   const total = cart.reduce(
     (sum, i) => sum + i.price * i.quantity,
     0
   )
 
+  // 🔹 cerrar venta
   const finalizeSale = async () => {
-    for (const item of cart) {
-      // registrar venta
-      await supabase.from('sales').insert({
-        product_id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        total: item.price * item.quantity,
-        sold_by: profile.id
-      })
+    if (cart.length === 0) return
 
-      // bajar stock (seguro)
-      await supabase.rpc('decrease_stock', {
-        product_id: item.id,
-        qty: item.quantity
-      })
+    setLoading(true)
+
+    for (const item of cart) {
+      // 1️⃣ registrar venta
+      const { error: saleError } = await supabase
+        .from('sales')
+        .insert({
+          product_id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          total: item.price * item.quantity,
+          sold_by: profile.id
+        })
+
+      if (saleError) {
+        alert('❌ Error registrando venta')
+        console.error(saleError)
+        setLoading(false)
+        return
+      }
+
+      // 2️⃣ bajar stock REAL (desde BD, no desde estado viejo)
+      const { error: stockError } = await supabase
+        .rpc('decrease_stock', {
+          product_id: item.id,
+          qty: item.quantity
+        })
+
+      if (stockError) {
+        alert('❌ Error bajando stock')
+        console.error(stockError)
+        setLoading(false)
+        return
+      }
     }
 
-    alert('Venta registrada ✅')
+    alert('✅ Venta registrada')
     setCart([])
-    onSaleDone()
+    await loadProducts() // 🔥 refresco real sin recargar página
+    setLoading(false)
   }
 
   return (
-    <div>
+    <div style={{ marginTop: 20 }}>
       <h2>💳 Caja registradora</h2>
 
       <input
         placeholder="Código de barras"
         value={barcode}
         onChange={e => setBarcode(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && addToCart()}
       />
-      <button onClick={addToCart}>Agregar</button>
 
-      <h3>Carrito</h3>
+      <button onClick={addToCart}>
+        Agregar
+      </button>
+
+      <h3>🛒 Carrito</h3>
+
+      {cart.length === 0 && <p>Vacío</p>}
+
       <ul>
-        {cart.map(i => (
-          <li key={i.id}>
-            {i.name} — S/{i.price} × {i.quantity}
+        {cart.map(item => (
+          <li key={item.id}>
+            {item.name} — S/{item.price} × {item.quantity}
+            <button onClick={() => removeFromCart(item.id)}>
+              ❌
+            </button>
           </li>
         ))}
       </ul>
@@ -96,8 +153,8 @@ export default function Sales({ profile, onSaleDone }) {
       <h3>Total: S/{total.toFixed(2)}</h3>
 
       {cart.length > 0 && (
-        <button onClick={finalizeSale}>
-          Cerrar venta
+        <button onClick={finalizeSale} disabled={loading}>
+          {loading ? 'Procesando…' : 'Cerrar venta'}
         </button>
       )}
     </div>
