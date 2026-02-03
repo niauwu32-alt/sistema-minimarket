@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Login from './Login'
-import Dashboard from './Dashboard' // tu sistema real
+import Dashboard from './Dashboard'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -24,9 +24,7 @@ export default function App() {
 
   if (loading) return <p>Cargando…</p>
 
-  if (!session) {
-    return <Login />
-  }
+  if (!session) return <Login />
 
   return <Dashboard session={session} />
 }
