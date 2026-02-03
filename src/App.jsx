@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Login from './Login'
-import Dashboard from './Dashboard' // tu panel
+import Dashboard from './Dashboard' // tu sistema real
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -22,7 +22,7 @@ export default function App() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  if (loading) return <p>Cargando...</p>
+  if (loading) return <p>Cargando…</p>
 
   if (!session) {
     return <Login />
