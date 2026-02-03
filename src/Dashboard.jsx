@@ -14,28 +14,19 @@ export default function Dashboard({ session }) {
         .eq('id', session.user.id)
         .single()
 
-      if (error) {
-        console.error(error)
-      } else {
-        setProfile(data)
-      }
-
+      if (!error) setProfile(data)
       setLoading(false)
     }
 
     loadProfile()
   }, [session.user.id])
 
-  if (loading) {
-    return <p>Cargando perfil…</p>
-  }
+  if (loading) return <p>Cargando perfil…</p>
 
   if (!profile) {
     return (
       <div style={{ padding: 40 }}>
         <h2>⚠️ Perfil no encontrado</h2>
-        <p>Este usuario no tiene perfil creado.</p>
-
         <button onClick={() => supabase.auth.signOut()}>
           Cerrar sesión
         </button>
@@ -52,14 +43,8 @@ export default function Dashboard({ session }) {
 
       <hr />
 
-      {/* ===== CAJA REGISTRADORA ===== */}
       {(profile.role === 'admin' || profile.role === 'vendedor') && (
         <Sales profile={profile} />
-      )}
-
-      {/* ===== SOLO STOCK (DESPUÉS) ===== */}
-      {profile.role === 'stock' && (
-        <p>📦 Vista de control de stock</p>
       )}
 
       <hr />
