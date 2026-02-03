@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import Sales from './Sales'
 
 export default function Dashboard({ session }) {
   const [profile, setProfile] = useState(null)
@@ -13,7 +14,9 @@ export default function Dashboard({ session }) {
         .eq('id', session.user.id)
         .single()
 
-      if (!error) {
+      if (error) {
+        console.error(error)
+      } else {
         setProfile(data)
       }
 
@@ -32,6 +35,7 @@ export default function Dashboard({ session }) {
       <div style={{ padding: 40 }}>
         <h2>⚠️ Perfil no encontrado</h2>
         <p>Este usuario no tiene perfil creado.</p>
+
         <button onClick={() => supabase.auth.signOut()}>
           Cerrar sesión
         </button>
@@ -43,25 +47,22 @@ export default function Dashboard({ session }) {
     <div style={{ padding: 40 }}>
       <h1>🏪 Panel Minimarket</h1>
 
-      <p><b>Usuario:</b> {profile.email}</p>
+      <p><b>Usuario:</b> {profile.email || session.user.email}</p>
       <p><b>Rol:</b> {profile.role}</p>
 
       <hr />
 
-      {/* AQUÍ VA TU SISTEMA */}
-      {profile.role === 'admin' && (
-        <p>🔧 Acceso total (admin)</p>
+      {/* ===== CAJA REGISTRADORA ===== */}
+      {(profile.role === 'admin' || profile.role === 'vendedor') && (
+        <Sales profile={profile} />
       )}
 
-      {profile.role === 'vendedor' && (
-        <p>💳 Vista de ventas</p>
-      )}
-
+      {/* ===== SOLO STOCK (DESPUÉS) ===== */}
       {profile.role === 'stock' && (
-        <p>📦 Control de stock</p>
+        <p>📦 Vista de control de stock</p>
       )}
 
-      <br />
+      <hr />
 
       <button onClick={() => supabase.auth.signOut()}>
         Cerrar sesión
