@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import Login from './Login'
+import Dashboard from './Dashboard' // tu sistema real
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -20,38 +22,11 @@ export default function App() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  if (loading) {
-    return <h2>Cargando...</h2>
-  }
+  if (loading) return <p>Cargando…</p>
 
   if (!session) {
-    return (
-      <div style={{ padding: 40 }}>
-        <h2>🔐 Inicia sesión</h2>
-
-        <button
-          onClick={async () => {
-            const { error } = await supabase.auth.signInWithPassword({
-              email: 'niauwu32@gmail.com',
-              password: 'Dkbn4f4v8vgRxXXw'
-            })
-            if (error) alert(error.message)
-          }}
-        >
-          Entrar (test)
-        </button>
-      </div>
-    )
+    return <Login />
   }
 
-  return (
-    <div style={{ padding: 40 }}>
-      <h1>✅ LOGIN OK</h1>
-      <p>Usuario: {session.user.email}</p>
-
-      <button onClick={() => supabase.auth.signOut()}>
-        Cerrar sesión
-      </button>
-    </div>
-  )
+  return <Dashboard session={session} />
 }
