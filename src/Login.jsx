@@ -28,7 +28,8 @@ export default function Login() {
       <h2>🔐 Iniciar sesión</h2>
 
       <input
-        placeholder="Email"
+        type="email"
+        placeholder="Correo"
         value={email}
         onChange={e => setEmail(e.target.value)}
         style={{ width: '100%', marginBottom: 10 }}
@@ -43,7 +44,7 @@ export default function Login() {
       />
 
       <button onClick={handleLogin} disabled={loading}>
-        {loading ? 'Entrando...' : 'Entrar'}
+        {loading ? 'Entrando…' : 'Entrar'}
       </button>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
