@@ -5,18 +5,27 @@ import Products from './Products'
 
 export default function Dashboard({ session }) {
   const [profile, setProfile] = useState(null)
-  const [view, setView] = useState('sales') // sales | products
+  const [view, setView] = useState('sales')
 
   useEffect(() => {
     supabase
       .from('profiles')
-      .select('*')
+      .select('id, email, role')
       .eq('id', session.user.id)
       .single()
-      .then(({ data }) => setProfile(data))
+      .then(({ data, error }) => {
+        if (error) {
+          console.error(error)
+        } else {
+          setProfile(data)
+        }
+      })
   }, [session.user.id])
 
-  if (!profile) return <p>Cargando…</p>
+  if (!profile) return <p>Cargando perfil…</p>
+
+  const canUseSystem =
+    profile.role === 'admin' || profile.role === 'colaborador'
 
   return (
     <div style={{ padding: 20 }}>
@@ -26,31 +35,19 @@ export default function Dashboard({ session }) {
 
       <hr />
 
-      {/* 🔘 SELECTOR DE VISTA */}
-      {(profile.role === 'empleado' || profile.role === 'admin') && (
-        <div style={{ marginBottom: 10 }}>
-          <button onClick={() => setView('sales')}>
-            💳 Caja
-          </button>
-          <button onClick={() => setView('products')}>
-            📦 Stock
-          </button>
-        </div>
-      )}
-
-      <hr />
-
-      {/* 👨‍💼 EMPLEADO */}
-      {profile.role === 'empleado' && (
+      {canUseSystem && (
         <>
-          {view === 'sales' && <Sales profile={profile} />}
-          {view === 'products' && <Products />}
-        </>
-      )}
+          <div style={{ marginBottom: 10 }}>
+            <button onClick={() => setView('sales')}>
+              💳 Caja
+            </button>
+            <button onClick={() => setView('products')}>
+              📦 Stock
+            </button>
+          </div>
 
-      {/* 🧑‍💻 ADMIN VE TODO SIN LIMITES */}
-      {profile.role === 'admin' && (
-        <>
+          <hr />
+
           {view === 'sales' && <Sales profile={profile} />}
           {view === 'products' && <Products />}
         </>
