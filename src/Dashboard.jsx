@@ -1,3 +1,4 @@
+console.log('🔥 DASHBOARD CARGADO 🔥')
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Sales from './Sales'
