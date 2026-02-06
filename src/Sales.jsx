@@ -1,3 +1,4 @@
+alert('🔥 SALES NUEVO CARGADO 🔥')
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 
