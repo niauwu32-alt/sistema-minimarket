@@ -5,118 +5,192 @@ export default function Sales({ profile }) {
   const [barcode, setBarcode] = useState('')
   const [products, setProducts] = useState({})
   const [cart, setCart] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState('')
 
-  // 🔹 cargar productos UNA SOLA VEZ
+  // 📦 cargar productos
   useEffect(() => {
     const loadProducts = async () => {
       const { data } = await supabase.from('products').select('*')
       const map = {}
-      data?.forEach(p => (map[p.barcode] = p))
+      data.forEach(p => (map[p.barcode] = p))
       setProducts(map)
     }
-
     loadProducts()
   }, [])
 
-  const addToCart = () => {
-    const product = products[barcode]
-    if (!product) return alert('❌ Producto no encontrado')
-    if (product.stock <= 0) return alert('❌ Sin stock')
+  // ➕ agregar producto
+  const addProduct = () => {
+    const p = products[barcode]
+    if (!p) {
+      alert('Producto no encontrado')
+      return
+    }
 
-    const existing = cart.find(i => i.id === product.id)
+    const existing = cart.find(i => i.id === p.id)
 
     if (existing) {
-      if (existing.quantity + 1 > product.stock)
-        return alert('❌ Stock insuficiente')
-
-      setCart(
-        cart.map(i =>
-          i.id === product.id
-            ? { ...i, quantity: i.quantity + 1 }
-            : i
-        )
-      )
+      setCart(cart.map(i =>
+        i.id === p.id
+          ? { ...i, quantity: i.quantity + 1 }
+          : i
+      ))
     } else {
-      setCart([...cart, { ...product, quantity: 1 }])
+      setCart([...cart, {
+        ...p,
+        quantity: 1
+      }])
     }
 
     setBarcode('')
   }
 
-  const total = cart.reduce(
-    (sum, i) => sum + i.price * i.quantity,
-    0
-  )
+  // ➕ cantidad
+  const increaseQty = (id) => {
+    setCart(cart.map(i =>
+      i.id === id ? { ...i, quantity: i.quantity + 1 } : i
+    ))
+  }
 
+  // ➖ cantidad (nunca < 1)
+  const decreaseQty = (id) => {
+    setCart(cart
+      .map(i =>
+        i.id === id ? { ...i, quantity: i.quantity - 1 } : i
+      )
+      .filter(i => i.quantity > 0)
+    )
+  }
+
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0)
+
+  // ✅ realizar venta
   const finalizeSale = async () => {
-    if (cart.length === 0) return
-    setLoading(true)
+    if (cart.length === 0) {
+      alert('Carrito vacío')
+      return
+    }
 
-    for (const item of cart) {
-      // registrar venta
-      await supabase.from('sales').insert({
+    if (!paymentMethod) {
+      alert('Selecciona método de pago')
+      return
+    }
+
+    // 1️⃣ crear venta
+    const { data: sale, error } = await supabase
+      .from('sales')
+      .insert({
+        cashier_id: profile.id,
+        cashier_email: profile.email,
+        payment_method: paymentMethod,
+        total
+      })
+      .select()
+      .single()
+
+    if (error) {
+      alert('Error al guardar venta')
+      return
+    }
+
+    // 2️⃣ items + stock
+    for (let item of cart) {
+      await supabase.from('sale_items').insert({
+        sale_id: sale.id,
         product_id: item.id,
         name: item.name,
         price: item.price,
         quantity: item.quantity,
-        total: item.price * item.quantity,
-        sold_by: profile.id
+        subtotal: item.price * item.quantity
       })
 
-      // bajar stock en BD
-      await supabase.rpc('decrease_stock', {
-        product_id: item.id,
-        qty: item.quantity
-      })
-
-      // 🔥 bajar stock LOCAL (SIN REFETCH)
-      setProducts(prev => ({
-        ...prev,
-        [item.barcode]: {
-          ...prev[item.barcode],
-          stock: prev[item.barcode].stock - item.quantity
-        }
-      }))
+      await supabase
+        .from('products')
+        .update({ stock: item.stock - item.quantity })
+        .eq('id', item.id)
     }
 
+    alert('Venta realizada ✅')
     setCart([])
-    setLoading(false)
-    alert('✅ Venta registrada')
+    setPaymentMethod('')
   }
 
   return (
-    <div style={{ marginTop: 20 }}>
+    <div style={{ padding: 20 }}>
       <h2>💳 Caja registradora</h2>
+
+      <p>
+        👤 <b>Cajero:</b> {profile.email}<br />
+        📅 <b>Fecha:</b> {new Date().toLocaleDateString()}<br />
+        ⏰ <b>Hora:</b> {new Date().toLocaleTimeString()}
+      </p>
+
+      <hr />
 
       <input
         placeholder="Código de barras"
         value={barcode}
         onChange={e => setBarcode(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && addToCart()}
       />
-
-      <button onClick={addToCart}>Agregar</button>
+      <button onClick={addProduct}>Agregar</button>
 
       <h3>🛒 Carrito</h3>
 
       {cart.length === 0 && <p>Vacío</p>}
 
       <ul>
-        {cart.map(item => (
-          <li key={item.id}>
-            {item.name} — S/{item.price} × {item.quantity}
+        {cart.map(i => (
+          <li key={i.id}>
+            {i.name} — S/{i.price} × {i.quantity} =
+            <b> S/{(i.price * i.quantity).toFixed(2)}</b>
+
+            <button onClick={() => increaseQty(i.id)}> ➕ </button>
+            <button onClick={() => decreaseQty(i.id)}> ➖ </button>
           </li>
         ))}
       </ul>
 
       <h3>Total: S/{total.toFixed(2)}</h3>
 
-      {cart.length > 0 && (
-        <button onClick={finalizeSale} disabled={loading}>
-          {loading ? 'Procesando…' : 'Cerrar venta'}
-        </button>
-      )}
+      <hr />
+
+      <h4>💳 Método de pago</h4>
+
+      <label>
+        <input
+          type="radio"
+          checked={paymentMethod === 'efectivo'}
+          onChange={() => setPaymentMethod('efectivo')}
+        />
+        Efectivo
+      </label>
+
+      <br />
+
+      <label>
+        <input
+          type="radio"
+          checked={paymentMethod === 'qr'}
+          onChange={() => setPaymentMethod('qr')}
+        />
+        QR (Yape / Plin)
+      </label>
+
+      <br />
+
+      <label>
+        <input
+          type="radio"
+          checked={paymentMethod === 'tarjeta'}
+          onChange={() => setPaymentMethod('tarjeta')}
+        />
+        Tarjeta
+      </label>
+
+      <br /><br />
+
+      <button onClick={finalizeSale}>
+        ✅ REALIZAR VENTA
+      </button>
     </div>
   )
 }
