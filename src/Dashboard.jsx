@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Sales from './Sales'
-import Stock from './Stock'
+import Products from './Products'
 
 export default function Dashboard({ session }) {
   const [profile, setProfile] = useState(null)
@@ -9,6 +9,8 @@ export default function Dashboard({ session }) {
 
   useEffect(() => {
     const loadProfile = async () => {
+      if (!session?.user) return
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -16,39 +18,58 @@ export default function Dashboard({ session }) {
         .single()
 
       if (error) {
-        console.error('Error cargando perfil', error)
+        console.error('Error cargando profile:', error)
       } else {
         setProfile(data)
       }
+
       setLoading(false)
     }
 
     loadProfile()
-  }, [session.user.id])
+  }, [session])
 
-  if (loading) return <p>Cargando perfil…</p>
-  if (!profile) return <p>No se encontró el perfil</p>
+  // ⏳ mientras carga
+  if (loading) {
+    return <p>Cargando perfil…</p>
+  }
 
+  // 🚨 si no existe profile
+  if (!profile) {
+    return <p>Perfil no encontrado</p>
+  }
+
+  // ✅ YA ES SEGURO usar profile.email
   return (
-    <div>
-      <h1>🏪 Panel Minimarket</h1>
+    <div style={{ padding: 20 }}>
+      <h2>🏪 Panel Minimarket</h2>
 
-      <p><strong>Usuario:</strong> {profile.email}</p>
-      <p><strong>Rol:</strong> {profile.role}</p>
+      <p><b>Usuario:</b> {profile.email}</p>
+      <p><b>Rol:</b> {profile.role}</p>
 
+      <hr />
+
+      {/* vistas por rol */}
       {profile.role === 'admin' && (
         <>
           <Sales profile={profile} />
-          <Stock />
+          <Products />
         </>
       )}
 
       {profile.role === 'colaborador' && (
         <>
           <Sales profile={profile} />
-          <Stock />
+          <Products />
         </>
       )}
+
+      <button
+        onClick={() => supabase.auth.signOut()}
+        style={{ marginTop: 20 }}
+      >
+        Cerrar sesión
+      </button>
     </div>
   )
 }
