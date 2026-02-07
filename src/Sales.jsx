@@ -1,197 +1,200 @@
-alert('🔥 SALES NUEVO CARGADO 🔥')
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 
 export default function Sales({ profile }) {
   const [barcode, setBarcode] = useState('')
-  const [products, setProducts] = useState({})
   const [cart, setCart] = useState([])
-  const [paymentMethod, setPaymentMethod] = useState('')
+  const [productsMap, setProductsMap] = useState({})
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
 
-  // 📦 cargar productos
+  // 🔄 cargar productos
   useEffect(() => {
     const loadProducts = async () => {
-      const { data } = await supabase.from('products').select('*')
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+
+      if (error) {
+        console.error(error)
+        return
+      }
+
       const map = {}
-      data.forEach(p => (map[p.barcode] = p))
-      setProducts(map)
+      data.forEach(p => {
+        map[p.barcode] = p
+      })
+      setProductsMap(map)
     }
+
     loadProducts()
   }, [])
 
-  // ➕ agregar producto
-  const addProduct = () => {
-    const p = products[barcode]
-    if (!p) {
+  // ➕ agregar al carrito
+  const addToCart = () => {
+    const product = productsMap[barcode]
+
+    if (!product) {
       alert('Producto no encontrado')
       return
     }
 
-    const existing = cart.find(i => i.id === p.id)
+    const existing = cart.find(p => p.id === product.id)
 
     if (existing) {
-      setCart(cart.map(i =>
-        i.id === p.id
-          ? { ...i, quantity: i.quantity + 1 }
-          : i
-      ))
+      if (existing.quantity + 1 > product.stock) {
+        alert('Stock insuficiente')
+        return
+      }
+
+      setCart(
+        cart.map(p =>
+          p.id === product.id
+            ? {
+                ...p,
+                quantity: p.quantity + 1,
+                total: (p.quantity + 1) * p.price
+              }
+            : p
+        )
+      )
     } else {
-      setCart([...cart, {
-        ...p,
-        quantity: 1
-      }])
+      if (product.stock <= 0) {
+        alert('Sin stock')
+        return
+      }
+
+      setCart([
+        ...cart,
+        {
+          ...product,
+          quantity: 1,
+          total: product.price
+        }
+      ])
     }
 
     setBarcode('')
   }
 
-  // ➕ cantidad
-  const increaseQty = (id) => {
-    setCart(cart.map(i =>
-      i.id === id ? { ...i, quantity: i.quantity + 1 } : i
-    ))
-  }
-
-  // ➖ cantidad (nunca < 1)
-  const decreaseQty = (id) => {
-    setCart(cart
-      .map(i =>
-        i.id === id ? { ...i, quantity: i.quantity - 1 } : i
-      )
-      .filter(i => i.quantity > 0)
+  // ➕➖ modificar cantidad
+  const changeQty = (id, delta) => {
+    setCart(
+      cart.map(p => {
+        if (p.id !== id) return p
+        const newQty = p.quantity + delta
+        if (newQty < 1) return p
+        if (newQty > p.stock) return p
+        return {
+          ...p,
+          quantity: newQty,
+          total: newQty * p.price
+        }
+      })
     )
   }
 
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0)
+  // ❌ eliminar del carrito
+  const removeFromCart = id => {
+    setCart(cart.filter(p => p.id !== id))
+  }
 
-  // ✅ realizar venta
+  // 💾 finalizar venta
   const finalizeSale = async () => {
-    if (cart.length === 0) {
-      alert('Carrito vacío')
+    if (cart.length === 0) return
+
+    const { data: auth } = await supabase.auth.getUser()
+    if (!auth?.user) {
+      alert('Usuario no autenticado')
       return
     }
 
-    if (!paymentMethod) {
-      alert('Selecciona método de pago')
-      return
-    }
+    const ticketNumber = Date.now() // simple y único
 
-    // 1️⃣ crear venta
-    const { data: sale, error } = await supabase
-      .from('sales')
-      .insert({
-        cashier_id: profile.id,
-        cashier_email: profile.email,
-        payment_method: paymentMethod,
-        total
-      })
-      .select()
-      .single()
-
-    if (error) {
-      alert('Error al guardar venta')
-      return
-    }
-
-    // 2️⃣ items + stock
-    for (let item of cart) {
-      await supabase.from('sale_items').insert({
-        sale_id: sale.id,
-        product_id: item.id,
+    for (const item of cart) {
+      const { error } = await supabase.from('sales').insert({
         name: item.name,
         price: item.price,
         quantity: item.quantity,
-        subtotal: item.price * item.quantity
+        total: item.price * item.quantity,
+        product_id: item.id,
+        sold_by: profile.id, // profiles.id (correcto)
+        payment_method: paymentMethod,
+        ticket_number: ticketNumber
       })
 
+      if (error) {
+        console.error(error)
+        alert('Error al guardar venta')
+        return
+      }
+
+      // 🔽 descontar stock REAL
       await supabase
         .from('products')
         .update({ stock: item.stock - item.quantity })
         .eq('id', item.id)
     }
 
-    alert('Venta realizada ✅')
+    alert('Venta registrada ✅')
     setCart([])
-    setPaymentMethod('')
   }
+
+  const totalAmount = cart.reduce((sum, p) => sum + p.total, 0)
 
   return (
     <div style={{ padding: 20 }}>
       <h2>💳 Caja registradora</h2>
 
       <p>
-        👤 <b>Cajero:</b> {profile.email}<br />
-        📅 <b>Fecha:</b> {new Date().toLocaleDateString()}<br />
-        ⏰ <b>Hora:</b> {new Date().toLocaleTimeString()}
+        Cajero: <strong>{profile.email}</strong>
       </p>
-
-      <hr />
+      <p>Fecha: {new Date().toLocaleString()}</p>
 
       <input
         placeholder="Código de barras"
         value={barcode}
         onChange={e => setBarcode(e.target.value)}
       />
-      <button onClick={addProduct}>Agregar</button>
+      <button onClick={addToCart}>Agregar</button>
 
       <h3>🛒 Carrito</h3>
 
       {cart.length === 0 && <p>Vacío</p>}
 
       <ul>
-        {cart.map(i => (
-          <li key={i.id}>
-            {i.name} — S/{i.price} × {i.quantity} =
-            <b> S/{(i.price * i.quantity).toFixed(2)}</b>
-
-            <button onClick={() => increaseQty(i.id)}> ➕ </button>
-            <button onClick={() => decreaseQty(i.id)}> ➖ </button>
+        {cart.map(p => (
+          <li key={p.id}>
+            {p.name} — S/{p.price}  
+            <br />
+            <button onClick={() => changeQty(p.id, -1)}>-</button>
+            <strong> {p.quantity} </strong>
+            <button onClick={() => changeQty(p.id, 1)}>+</button>
+            <br />
+            Subtotal: S/{p.total.toFixed(2)}
+            <button onClick={() => removeFromCart(p.id)}> ❌</button>
           </li>
         ))}
       </ul>
 
-      <h3>Total: S/{total.toFixed(2)}</h3>
+      <h3>Total: S/{totalAmount.toFixed(2)}</h3>
 
-      <hr />
-
-      <h4>💳 Método de pago</h4>
-
-      <label>
-        <input
-          type="radio"
-          checked={paymentMethod === 'efectivo'}
-          onChange={() => setPaymentMethod('efectivo')}
-        />
-        Efectivo
-      </label>
-
-      <br />
-
-      <label>
-        <input
-          type="radio"
-          checked={paymentMethod === 'qr'}
-          onChange={() => setPaymentMethod('qr')}
-        />
-        QR (Yape / Plin)
-      </label>
-
-      <br />
-
-      <label>
-        <input
-          type="radio"
-          checked={paymentMethod === 'tarjeta'}
-          onChange={() => setPaymentMethod('tarjeta')}
-        />
-        Tarjeta
-      </label>
+      <h4>Método de pago</h4>
+      <select
+        value={paymentMethod}
+        onChange={e => setPaymentMethod(e.target.value)}
+      >
+        <option value="efectivo">Efectivo</option>
+        <option value="qr">QR</option>
+        <option value="tarjeta">Tarjeta</option>
+      </select>
 
       <br /><br />
 
-      <button onClick={finalizeSale}>
-        ✅ REALIZAR VENTA
-      </button>
+      {cart.length > 0 && (
+        <button onClick={finalizeSale}>
+          ✅ Realizar venta
+        </button>
+      )}
     </div>
   )
 }
