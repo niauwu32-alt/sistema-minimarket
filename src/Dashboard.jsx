@@ -1,64 +1,54 @@
-console.log('🔥 DASHBOARD CARGADO 🔥')
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Sales from './Sales'
-import Products from './Products'
+import Stock from './Stock'
 
 export default function Dashboard({ session }) {
   const [profile, setProfile] = useState(null)
-  const [view, setView] = useState('sales')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('id, email, role')
-      .eq('id', session.user.id)
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error(error)
-        } else {
-          setProfile(data)
-        }
-      })
+    const loadProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+
+      if (error) {
+        console.error('Error cargando perfil', error)
+      } else {
+        setProfile(data)
+      }
+      setLoading(false)
+    }
+
+    loadProfile()
   }, [session.user.id])
 
-  if (!profile) return <p>Cargando perfil…</p>
-
-  const canUseSystem =
-    profile.role === 'admin' || profile.role === 'colaborador'
+  if (loading) return <p>Cargando perfil…</p>
+  if (!profile) return <p>No se encontró el perfil</p>
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>🏪 Panel Minimarket</h2>
-      <p><b>Usuario:</b> {profile.email}</p>
-      <p><b>Rol:</b> {profile.role}</p>
+    <div>
+      <h1>🏪 Panel Minimarket</h1>
 
-      <hr />
+      <p><strong>Usuario:</strong> {profile.email}</p>
+      <p><strong>Rol:</strong> {profile.role}</p>
 
-      {canUseSystem && (
+      {profile.role === 'admin' && (
         <>
-          <div style={{ marginBottom: 10 }}>
-            <button onClick={() => setView('sales')}>
-              💳 Caja
-            </button>
-            <button onClick={() => setView('products')}>
-              📦 Stock
-            </button>
-          </div>
-
-          <hr />
-
-          {view === 'sales' && <Sales profile={profile} />}
-          {view === 'products' && <Products />}
+          <Sales profile={profile} />
+          <Stock />
         </>
       )}
 
-      <hr />
-
-      <button onClick={() => supabase.auth.signOut()}>
-        Cerrar sesión
-      </button>
+      {profile.role === 'colaborador' && (
+        <>
+          <Sales profile={profile} />
+          <Stock />
+        </>
+      )}
     </div>
   )
 }
