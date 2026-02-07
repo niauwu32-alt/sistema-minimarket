@@ -124,7 +124,7 @@ export default function Sales({ profile }) {
     }}>
       <h2>🏪 Caja</h2>
 
-      <p><strong>Cajero:</strong> {profile.email}</p>
+      <p><strong>Cajero:</strong> {profile?.email}</p>
       <p><strong>DNI:</strong> {profile.dni || '—'}</p>
       <p>{now.toLocaleDateString()} — {now.toLocaleTimeString()}</p>
 
