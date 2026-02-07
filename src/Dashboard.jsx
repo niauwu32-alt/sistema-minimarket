@@ -1,35 +1,71 @@
-return (
-  <div style={{ padding: 20 }}>
-    <h2>🏪 Panel Minimarket</h2>
+import { useEffect, useState } from 'react'
+import { supabase } from './supabaseClient'
+import Sales from './Sales'
+import Products from './Products'
 
-    <p>
-      <b>Usuario:</b>{' '}
-      {profile?.email ?? 'Cargando usuario…'}
-    </p>
+export default function Dashboard({ session }) {
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-    <p>
-      <b>Rol:</b>{' '}
-      {profile?.role ?? '—'}
-    </p>
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!session?.user) {
+        setLoading(false)
+        return
+      }
 
-    <hr />
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
 
-    {profile?.role === 'admin' && (
-      <>
-        <Sales profile={profile} />
-        <Products />
-      </>
-    )}
+      setProfile(data ?? null)
+      setLoading(false)
+    }
 
-    {profile?.role === 'colaborador' && (
-      <>
-        <Sales profile={profile} />
-        <Products />
-      </>
-    )}
+    loadProfile()
+  }, [session])
 
-    <button onClick={() => supabase.auth.signOut()}>
-      Cerrar sesión
-    </button>
-  </div>
-)
+  if (loading) {
+    return <p style={{ padding: 20 }}>Cargando perfil…</p>
+  }
+
+  if (!profile) {
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Perfil incompleto</h2>
+        <p>Este usuario aún no tiene datos.</p>
+        <button onClick={() => supabase.auth.signOut()}>
+          Cerrar sesión
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: 20 }}>
+      <h2>🏪 Panel Minimarket</h2>
+
+      <p><b>Usuario:</b> {profile.email ?? '—'}</p>
+      <p><b>Rol:</b> {profile.role ?? '—'}</p>
+      <p><b>DNI:</b> {profile.dni ?? 'No registrado'}</p>
+
+      <hr />
+
+      {(profile.role === 'admin' || profile.role === 'colaborador') && (
+        <>
+          <Sales profile={profile} />
+          <Products />
+        </>
+      )}
+
+      <button
+        style={{ marginTop: 20 }}
+        onClick={() => supabase.auth.signOut()}
+      >
+        Cerrar sesión
+      </button>
+    </div>
+  )
+}
