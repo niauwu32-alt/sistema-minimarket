@@ -146,7 +146,7 @@ export default function Sales({ profile }) {
       <h2>💳 Caja registradora</h2>
 
       <p>
-        Cajero: <strong>{profile.email}</strong>
+        Cajero: <strong>{profile?.email}</strong>
       </p>
       <p>Fecha: {new Date().toLocaleString()}</p>
 
