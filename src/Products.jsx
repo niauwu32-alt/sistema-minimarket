@@ -12,13 +12,14 @@ export default function Products({ products }) {
           </tr>
         </thead>
         <tbody>
-          {products.map(p => (
+          const [products, setProducts] = useState()
+
             <tr key={p.id}>
               <td>{p.name}</td>
               <td>S/{p.price}</td>
               <td>{p.stock}</td>
             </tr>
-          ))}
+        
         </tbody>
       </table>
     </div>
