@@ -7,7 +7,7 @@ export default function Ticket({ sale }) {
       {items.length === 0 ? (
         <p>Sin items</p>
       ) : (
-        items.map((i, idx) => (
+        items.map((p, idx) => (
           <div key={idx}>
             {i.name} x {i.quantity} — S/{i.total}
           </div>
