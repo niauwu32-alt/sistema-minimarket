@@ -1,8 +1,10 @@
+import Dashboard from "./Dashboard"
+
 export default function App() {
   return (
     <div style={{ padding: 40 }}>
-      <h1>✅ APP FUNCIONANDO</h1>
-      <p>Si ves esto, React está bien.</p>
+      <h1>TEST DASHBOARD</h1>
+      <Dashboard />
     </div>
   )
 }
