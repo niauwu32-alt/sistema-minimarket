@@ -5,6 +5,17 @@ export default function Sales({ profile }) {
   const [barcode, setBarcode] = useState("")
   const [cart, setCart] = useState([])
   const [products, setProducts] = useState([])
+  const [payment, setPayment] = useState("efectivo")
+  const [time, setTime] = useState(new Date())
+
+  // 🔹 Hora en vivo
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTime(new Date())
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   // 🔹 Cargar productos
   useEffect(() => {
@@ -12,13 +23,18 @@ export default function Sales({ profile }) {
   }, [])
 
   async function loadProducts() {
-    const { data } = await supabase.from("products").select("*")
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+
     setProducts(data || [])
   }
 
-  // 🔹 Agregar por código
+  // 🔹 Agregar producto por código
   function addProduct() {
-    const product = products.find(p => p.barcode === barcode)
+    const product = products.find(
+      p => p.barcode === barcode
+    )
 
     if (!product) {
       alert("Producto no encontrado")
@@ -26,31 +42,54 @@ export default function Sales({ profile }) {
     }
 
     if (product.stock <= 0) {
-      alert("Sin stock")
+      alert("SIN STOCK")
       return
     }
 
-    const existing = cart.find(p => p.id === product.id)
+    const existing = cart.find(
+      p => p.id === product.id
+    )
 
     if (existing) {
-      setCart(cart.map(p =>
-        p.id === product.id
-          ? { ...p, quantity: p.quantity + 1 }
-          : p
-      ))
+      setCart(
+        cart.map(p =>
+          p.id === product.id
+            ? { ...p, quantity: p.quantity + 1 }
+            : p
+        )
+      )
     } else {
-      setCart([...cart, { ...product, quantity: 1 }])
+      setCart([
+        ...cart,
+        { ...product, quantity: 1 }
+      ])
     }
 
     setBarcode("")
   }
 
-  // 🔹 Quitar producto
+  function changeQty(id, delta) {
+    setCart(
+      cart.map(p => {
+        if (p.id !== id) return p
+
+        const newQty = p.quantity + delta
+
+        if (newQty <= 0) return p
+        if (newQty > p.stock) {
+          alert("No hay más stock")
+          return p
+        }
+
+        return { ...p, quantity: newQty }
+      })
+    )
+  }
+
   function removeProduct(id) {
     setCart(cart.filter(p => p.id !== id))
   }
 
-  // 🔹 Total
   const total = cart.reduce(
     (sum, p) => sum + p.price * p.quantity,
     0
@@ -67,7 +106,8 @@ export default function Sales({ profile }) {
         quantity: item.quantity,
         total: item.price * item.quantity,
         product_id: item.id,
-        sold_by: profile?.id
+        sold_by: profile?.id,
+        payment_method: payment
       })
 
       await supabase
@@ -78,7 +118,8 @@ export default function Sales({ profile }) {
         .eq("id", item.id)
     }
 
-    alert("Venta realizada ✅")
+    alert("Venta registrada ✅")
+
     setCart([])
     loadProducts()
   }
@@ -87,13 +128,41 @@ export default function Sales({ profile }) {
     <div style={{ padding: 20 }}>
       <h2>💳 Caja registradora</h2>
 
+      {/* 👨‍💼 DATOS CAJERO */}
+      <div style={{ marginBottom: 20 }}>
+        <p>
+          Cajero:{" "}
+          {profile?.full_name || "—"}
+        </p>
+
+        <p>
+          DNI: {profile?.dni || "—"}
+        </p>
+
+        <p>
+          Fecha:{" "}
+          {time.toLocaleDateString()}
+        </p>
+
+        <p>
+          Hora:{" "}
+          {time.toLocaleTimeString()}
+        </p>
+      </div>
+
+      {/* 🔍 Código */}
       <input
         placeholder="Código de barras"
         value={barcode}
-        onChange={e => setBarcode(e.target.value)}
+        onChange={e =>
+          setBarcode(e.target.value)
+        }
       />
-      <button onClick={addProduct}>Agregar</button>
+      <button onClick={addProduct}>
+        Agregar
+      </button>
 
+      {/* 🛒 Carrito */}
       <h3>🛒 Carrito</h3>
 
       {cart.length === 0 ? (
@@ -101,16 +170,61 @@ export default function Sales({ profile }) {
       ) : (
         cart.map(item => (
           <div key={item.id}>
-            {item.name} — S/{item.price} — x{item.quantity}
-            <button onClick={() => removeProduct(item.id)}>❌</button>
+            {item.name} — S/{item.price} — x
+            {item.quantity}
+
+            <button
+              onClick={() =>
+                changeQty(item.id, -1)
+              }
+            >
+              ➖
+            </button>
+
+            <button
+              onClick={() =>
+                changeQty(item.id, 1)
+              }
+            >
+              ➕
+            </button>
+
+            <button
+              onClick={() =>
+                removeProduct(item.id)
+              }
+            >
+              ❌
+            </button>
           </div>
         ))
       )}
 
-      <h3>Total: S/{total.toFixed(2)}</h3>
+      <h2>Total: S/{total.toFixed(2)}</h2>
+
+      {/* 💰 Pago */}
+      <h3>Método de pago</h3>
+
+      <select
+        value={payment}
+        onChange={e =>
+          setPayment(e.target.value)
+        }
+      >
+        <option value="efectivo">
+          Efectivo
+        </option>
+        <option value="tarjeta">
+          Tarjeta
+        </option>
+        <option value="qr">QR</option>
+      </select>
+
+      <br />
+      <br />
 
       <button onClick={finalizeSale}>
-        Realizar venta
+        💰 Realizar venta
       </button>
     </div>
   )
