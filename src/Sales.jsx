@@ -1,116 +1,116 @@
-import { useEffect, useState } from 'react'
-import { supabase } from './supabaseClient'
+import { useState, useEffect } from "react"
+import { supabase } from "./supabaseClient"
 
 export default function Sales({ profile }) {
-  const [barcode, setBarcode] = useState('')
-  const [cart, setCart] = useState([]) // SIEMPRE array
-  const [productsMap, setProductsMap] = useState({})
+  const [barcode, setBarcode] = useState("")
+  const [cart, setCart] = useState([])
+  const [products, setProducts] = useState([])
 
+  // 🔹 Cargar productos
   useEffect(() => {
-    const loadProducts = async () => {
-      const { data } = await supabase.from('products').select('*')
-      const map = {}
-      ;(data || []).forEach(p => {
-        map[p.barcode] = p
-      })
-      setProductsMap(map)
-    }
     loadProducts()
   }, [])
 
-  const addToCart = () => {
-    const product = productsMap[barcode]
+  async function loadProducts() {
+    const { data } = await supabase.from("products").select("*")
+    setProducts(data || [])
+  }
+
+  // 🔹 Agregar por código
+  function addProduct() {
+    const product = products.find(p => p.barcode === barcode)
+
     if (!product) {
-      alert('Producto no encontrado')
+      alert("Producto no encontrado")
       return
     }
+
     if (product.stock <= 0) {
-      alert('Stock agotado')
+      alert("Sin stock")
       return
     }
 
-    setCart(prev => {
-      const existing = prev.find(p => p.id === product.id)
-      if (existing) {
-        if (existing.quantity + 1 > product.stock) return prev
-        return prev.map(p =>
-          p.id === product.id
-            ? { ...p, quantity: p.quantity + 1 }
-            : p
-        )
-      }
-      return [...prev, { ...product, quantity: 1 }]
-    })
+    const existing = cart.find(p => p.id === product.id)
 
-    setBarcode('')
+    if (existing) {
+      setCart(cart.map(p =>
+        p.id === product.id
+          ? { ...p, quantity: p.quantity + 1 }
+          : p
+      ))
+    } else {
+      setCart([...cart, { ...product, quantity: 1 }])
+    }
+
+    setBarcode("")
   }
 
-  const changeQty = (id, delta) => {
-    setCart(prev =>
-      prev
-        .map(p => {
-          if (p.id !== id) return p
-          const qty = Math.max(0, p.quantity + delta)
-          return { ...p, quantity: qty }
-        })
-        .filter(p => p.quantity > 0)
-    )
+  // 🔹 Quitar producto
+  function removeProduct(id) {
+    setCart(cart.filter(p => p.id !== id))
   }
 
-  const total = cart.reduce((s, p) => s + p.price * p.quantity, 0)
+  // 🔹 Total
+  const total = cart.reduce(
+    (sum, p) => sum + p.price * p.quantity,
+    0
+  )
 
-  const finalizeSale = async () => {
+  // 🔹 Finalizar venta
+  async function finalizeSale() {
     if (cart.length === 0) return
 
     for (const item of cart) {
-      await supabase.from('sales').insert({
-        product_id: item.id,
+      await supabase.from("sales").insert({
         name: item.name,
         price: item.price,
         quantity: item.quantity,
         total: item.price * item.quantity,
-        sold_by: profile?.id ?? null,
-        payment_method: 'efectivo'
+        product_id: item.id,
+        sold_by: profile?.id
       })
 
       await supabase
-        .from('products')
-        .update({ stock: item.stock - item.quantity })
-        .eq('id', item.id)
+        .from("products")
+        .update({
+          stock: item.stock - item.quantity
+        })
+        .eq("id", item.id)
     }
 
-    alert('Venta registrada')
+    alert("Venta realizada ✅")
     setCart([])
+    loadProducts()
   }
 
   return (
     <div style={{ padding: 20 }}>
-      <h3>💳 Caja registradora</h3>
+      <h2>💳 Caja registradora</h2>
 
       <input
         placeholder="Código de barras"
         value={barcode}
         onChange={e => setBarcode(e.target.value)}
       />
-      <button onClick={addToCart}>Agregar</button>
+      <button onClick={addProduct}>Agregar</button>
 
-      <h4>🛒 Carrito</h4>
+      <h3>🛒 Carrito</h3>
 
       {cart.length === 0 ? (
         <p>Vacío</p>
       ) : (
-        cart.map(p => (
-          <div key={p.id}>
-            {p.name} — S/{p.price} — Cant: {p.quantity}
-            <button onClick={() => changeQty(p.id, +1)}>+</button>
-            <button onClick={() => changeQty(p.id, -1)}>-</button>
+        cart.map(item => (
+          <div key={item.id}>
+            {item.name} — S/{item.price} — x{item.quantity}
+            <button onClick={() => removeProduct(item.id)}>❌</button>
           </div>
         ))
       )}
 
-      <h4>Total: S/{total.toFixed(2)}</h4>
-      <button onClick={finalizeSale} disabled={cart.length === 0}>
-        Finalizar venta
+      <h3>Total: S/{total.toFixed(2)}</h3>
+
+      <button onClick={finalizeSale}>
+        Realizar venta
       </button>
     </div>
   )
