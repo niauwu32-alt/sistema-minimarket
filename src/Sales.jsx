@@ -300,7 +300,7 @@ export default function Sales({ profile }) {
           }}
           onClick={finalizeSale}
         >
-          💰 COBRAR
+           COBRAR
         </button>
       </div>
     </div>
