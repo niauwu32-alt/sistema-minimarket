@@ -92,27 +92,42 @@ export default function Sales({ profile }) {
     0
   )
 
-  // 💰 Finalizar venta
+  // 💰 Finalizar venta (FIX SIN CAMBIAR TU LÓGICA)
   async function finalizeSale() {
     if (cart.length === 0) return
 
     for (const item of cart) {
-      await supabase.from("sales").insert({
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        total: item.price * item.quantity,
-        product_id: item.id,
-        sold_by: profile?.id,
-        payment_method: payment
-      })
 
-      await supabase
+      const { error: saleError } = await supabase
+        .from("sales")
+        .insert({
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          total: item.price * item.quantity,
+          product_id: item.id,
+          sold_by: profile?.id,
+          payment_method: payment
+        })
+
+      if (saleError) {
+        console.error("ERROR SALES:", saleError)
+        alert("Error al guardar venta")
+        return
+      }
+
+      const { error: stockError } = await supabase
         .from("products")
         .update({
           stock: item.stock - item.quantity
         })
         .eq("id", item.id)
+
+      if (stockError) {
+        console.error("ERROR STOCK:", stockError)
+        alert("Error al actualizar stock")
+        return
+      }
     }
 
     alert("Venta registrada ✅")
@@ -127,7 +142,7 @@ export default function Sales({ profile }) {
       padding: 20,
       fontFamily: "Arial"
     }}>
-      {/* 🧾 CABECERA */}
+      {/* CABECERA */}
       <div style={{
         background: "#111",
         color: "#fff",
@@ -136,7 +151,7 @@ export default function Sales({ profile }) {
         marginBottom: 20
       }}>
         <h2 style={{ margin: 0 }}>
-          💳 Caja
+           Caja
         </h2>
 
         <div style={{
@@ -158,7 +173,7 @@ export default function Sales({ profile }) {
         </div>
       </div>
 
-      {/* 🔍 BUSCADOR */}
+      {/* BUSCADOR */}
       <div style={{
         display: "flex",
         gap: 10,
@@ -188,7 +203,7 @@ export default function Sales({ profile }) {
         </button>
       </div>
 
-      {/* 🛒 CARRITO */}
+      {/* CARRITO */}
       <div style={{
         minHeight: 200,
         border: "1px solid #ddd",
@@ -225,7 +240,7 @@ export default function Sales({ profile }) {
                     changeQty(item.id, -1)
                   }
                 >
-                  ➖
+                  -
                 </button>
 
                 {item.quantity}
@@ -235,7 +250,7 @@ export default function Sales({ profile }) {
                     changeQty(item.id, 1)
                   }
                 >
-                  ➕
+                  +
                 </button>
 
                 <button
@@ -243,7 +258,7 @@ export default function Sales({ profile }) {
                     removeProduct(item.id)
                   }
                 >
-                  ❌
+                  X
                 </button>
               </div>
             </div>
@@ -251,7 +266,7 @@ export default function Sales({ profile }) {
         )}
       </div>
 
-      {/* 💰 TOTAL */}
+      {/* TOTAL */}
       <div style={{
         fontSize: 32,
         fontWeight: "bold",
@@ -261,7 +276,7 @@ export default function Sales({ profile }) {
         Total: S/{total.toFixed(2)}
       </div>
 
-      {/* 💳 PAGO */}
+      {/* PAGO */}
       <div style={{
         display: "flex",
         gap: 10,
