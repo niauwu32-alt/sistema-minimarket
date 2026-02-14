@@ -8,16 +8,15 @@ export default function Sales({ profile }) {
   const [payment, setPayment] = useState("efectivo")
   const [time, setTime] = useState(new Date())
 
-  // 🔹 Hora en vivo
+  // 🕒 Hora en vivo
   useEffect(() => {
-    const interval = setInterval(() => {
+    const i = setInterval(() => {
       setTime(new Date())
     }, 1000)
-
-    return () => clearInterval(interval)
+    return () => clearInterval(i)
   }, [])
 
-  // 🔹 Cargar productos
+  // 📦 Cargar productos
   useEffect(() => {
     loadProducts()
   }, [])
@@ -26,11 +25,10 @@ export default function Sales({ profile }) {
     const { data } = await supabase
       .from("products")
       .select("*")
-
     setProducts(data || [])
   }
 
-  // 🔹 Agregar producto por código
+  // 🔎 Agregar producto
   function addProduct() {
     const product = products.find(
       p => p.barcode === barcode
@@ -74,7 +72,6 @@ export default function Sales({ profile }) {
         if (p.id !== id) return p
 
         const newQty = p.quantity + delta
-
         if (newQty <= 0) return p
         if (newQty > p.stock) {
           alert("No hay más stock")
@@ -95,7 +92,7 @@ export default function Sales({ profile }) {
     0
   )
 
-  // 🔹 Finalizar venta
+  // 💰 Finalizar venta
   async function finalizeSale() {
     if (cart.length === 0) return
 
@@ -119,113 +116,193 @@ export default function Sales({ profile }) {
     }
 
     alert("Venta registrada ✅")
-
     setCart([])
     loadProducts()
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>💳 Caja registradora</h2>
+    <div style={{
+      maxWidth: 900,
+      margin: "auto",
+      padding: 20,
+      fontFamily: "Arial"
+    }}>
+      {/* 🧾 CABECERA */}
+      <div style={{
+        background: "#111",
+        color: "#fff",
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 20
+      }}>
+        <h2 style={{ margin: 0 }}>
+          💳 Caja
+        </h2>
 
-      {/* 👨‍💼 DATOS CAJERO */}
-      <div style={{ marginBottom: 20 }}>
-        <p>
-          Cajero:{" "}
-          {profile?.full_name || "—"}
-        </p>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 14
+        }}>
+          <div>
+            {profile?.full_name}
+            <br />
+            DNI: {profile?.dni}
+          </div>
 
-        <p>
-          DNI: {profile?.dni || "—"}
-        </p>
-
-        <p>
-          Fecha:{" "}
-          {time.toLocaleDateString()}
-        </p>
-
-        <p>
-          Hora:{" "}
-          {time.toLocaleTimeString()}
-        </p>
+          <div style={{ textAlign: "right" }}>
+            {time.toLocaleDateString()}
+            <br />
+            {time.toLocaleTimeString()}
+          </div>
+        </div>
       </div>
 
-      {/* 🔍 Código */}
-      <input
-        placeholder="Código de barras"
-        value={barcode}
-        onChange={e =>
-          setBarcode(e.target.value)
-        }
-      />
-      <button onClick={addProduct}>
-        Agregar
-      </button>
+      {/* 🔍 BUSCADOR */}
+      <div style={{
+        display: "flex",
+        gap: 10,
+        marginBottom: 20
+      }}>
+        <input
+          style={{
+            flex: 1,
+            padding: 12,
+            fontSize: 18
+          }}
+          placeholder="Escanear código"
+          value={barcode}
+          onChange={e =>
+            setBarcode(e.target.value)
+          }
+        />
 
-      {/* 🛒 Carrito */}
-      <h3>🛒 Carrito</h3>
+        <button
+          style={{
+            padding: "12px 20px",
+            fontSize: 18
+          }}
+          onClick={addProduct}
+        >
+          Agregar
+        </button>
+      </div>
 
-      {cart.length === 0 ? (
-        <p>Vacío</p>
-      ) : (
-        cart.map(item => (
-          <div key={item.id}>
-            {item.name} — S/{item.price} — x
-            {item.quantity}
-
-            <button
-              onClick={() =>
-                changeQty(item.id, -1)
-              }
+      {/* 🛒 CARRITO */}
+      <div style={{
+        minHeight: 200,
+        border: "1px solid #ddd",
+        borderRadius: 10,
+        padding: 10,
+        marginBottom: 20
+      }}>
+        {cart.length === 0 ? (
+          <p style={{ color: "#888" }}>
+            Carrito vacío
+          </p>
+        ) : (
+          cart.map(item => (
+            <div
+              key={item.id}
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                padding: 10,
+                borderBottom:
+                  "1px solid #eee"
+              }}
             >
-              ➖
-            </button>
+              <div>
+                <b>{item.name}</b>
+                <br />
+                S/{item.price}
+              </div>
 
-            <button
-              onClick={() =>
-                changeQty(item.id, 1)
-              }
-            >
-              ➕
-            </button>
+              <div>
+                <button
+                  onClick={() =>
+                    changeQty(item.id, -1)
+                  }
+                >
+                  ➖
+                </button>
 
-            <button
-              onClick={() =>
-                removeProduct(item.id)
-              }
-            >
-              ❌
-            </button>
-          </div>
-        ))
-      )}
+                {item.quantity}
 
-      <h2>Total: S/{total.toFixed(2)}</h2>
+                <button
+                  onClick={() =>
+                    changeQty(item.id, 1)
+                  }
+                >
+                  ➕
+                </button>
 
-      {/* 💰 Pago */}
-      <h3>Método de pago</h3>
+                <button
+                  onClick={() =>
+                    removeProduct(item.id)
+                  }
+                >
+                  ❌
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
 
-      <select
-        value={payment}
-        onChange={e =>
-          setPayment(e.target.value)
-        }
-      >
-        <option value="efectivo">
-          Efectivo
-        </option>
-        <option value="tarjeta">
-          Tarjeta
-        </option>
-        <option value="qr">QR</option>
-      </select>
+      {/* 💰 TOTAL */}
+      <div style={{
+        fontSize: 32,
+        fontWeight: "bold",
+        textAlign: "right",
+        marginBottom: 20
+      }}>
+        Total: S/{total.toFixed(2)}
+      </div>
 
-      <br />
-      <br />
+      {/* 💳 PAGO */}
+      <div style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "center"
+      }}>
+        <select
+          style={{
+            padding: 10,
+            fontSize: 16
+          }}
+          value={payment}
+          onChange={e =>
+            setPayment(e.target.value)
+          }
+        >
+          <option value="efectivo">
+            Efectivo
+          </option>
+          <option value="tarjeta">
+            Tarjeta
+          </option>
+          <option value="qr">
+            QR
+          </option>
+        </select>
 
-      <button onClick={finalizeSale}>
-        💰 Realizar venta
-      </button>
+        <button
+          style={{
+            flex: 1,
+            padding: 15,
+            fontSize: 20,
+            background: "#28a745",
+            color: "white",
+            border: "none",
+            borderRadius: 8
+          }}
+          onClick={finalizeSale}
+        >
+          💰 COBRAR
+        </button>
+      </div>
     </div>
   )
 }
