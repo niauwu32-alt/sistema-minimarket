@@ -4,6 +4,7 @@ import { supabase } from "./supabaseClient"
 import Sales from "./Sales"
 
 export default function Dashboard({ session }) {
+
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -12,6 +13,7 @@ export default function Dashboard({ session }) {
   }, [])
 
   async function loadProfile() {
+
     if (!session?.user?.id) {
       setLoading(false)
       return
@@ -29,16 +31,26 @@ export default function Dashboard({ session }) {
 
   if (loading) return <p>Cargando…</p>
 
-  // 📱 Detectar celular por tamaño de pantalla
-  const isMobile = window.innerWidth < 768
+  // 📱 DETECCIÓN REAL DE MÓVIL
+  const isMobile =
+    /Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i
+      .test(navigator.userAgent)
 
   return (
     <div>
+
       {isMobile ? (
+
+        // 📱 INVENTARIO CELULAR
         <ProductsMobile />
+
       ) : (
+
+        // 💻 CAJA PC
         <Sales profile={profile} />
+
       )}
+
     </div>
   )
 }
