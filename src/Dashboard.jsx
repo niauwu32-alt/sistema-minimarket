@@ -31,22 +31,22 @@ export default function Dashboard({ session }) {
 
   if (loading) return <p>Cargando…</p>
 
-  // 📱 DETECCIÓN REAL DE MÓVIL
-  const isMobile =
-    /Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i
-      .test(navigator.userAgent)
+  // 📱 DETECTAR DISPOSITIVO TÁCTIL (CELULAR)
+  const isTouchDevice =
+    "ontouchstart" in window ||
+    navigator.maxTouchPoints > 0
 
   return (
     <div>
 
-      {isMobile ? (
+      {isTouchDevice ? (
 
-        // 📱 INVENTARIO CELULAR
+        // 📱 INVENTARIO
         <ProductsMobile />
 
       ) : (
 
-        // 💻 CAJA PC
+        // 💻 CAJA
         <Sales profile={profile} />
 
       )}
