@@ -8,79 +8,51 @@ export default function Sales({ profile }) {
   const [payment, setPayment] = useState("efectivo")
   const [time, setTime] = useState(new Date())
 
-  // 🕒 Hora en vivo
   useEffect(() => {
-    const i = setInterval(() => {
-      setTime(new Date())
-    }, 1000)
+    const i = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(i)
   }, [])
 
-  // 📦 Cargar productos
   useEffect(() => {
     loadProducts()
   }, [])
 
   async function loadProducts() {
-    const { data } = await supabase
-      .from("products")
-      .select("*")
+    const { data } = await supabase.from("products").select("*")
     setProducts(data || [])
   }
 
-  // 🔎 Agregar producto
   function addProduct() {
-    const product = products.find(
-      p => p.barcode === barcode
-    )
+    const product = products.find(p => p.barcode === barcode)
 
-    if (!product) {
-      alert("Producto no encontrado")
-      return
-    }
+    if (!product) return alert("Producto no encontrado")
+    if (product.stock <= 0) return alert("SIN STOCK")
 
-    if (product.stock <= 0) {
-      alert("SIN STOCK")
-      return
-    }
-
-    const existing = cart.find(
-      p => p.id === product.id
-    )
+    const existing = cart.find(p => p.id === product.id)
 
     if (existing) {
-      setCart(
-        cart.map(p =>
-          p.id === product.id
-            ? { ...p, quantity: p.quantity + 1 }
-            : p
-        )
-      )
+      setCart(cart.map(p =>
+        p.id === product.id
+          ? { ...p, quantity: p.quantity + 1 }
+          : p
+      ))
     } else {
-      setCart([
-        ...cart,
-        { ...product, quantity: 1 }
-      ])
+      setCart([...cart, { ...product, quantity: 1 }])
     }
 
     setBarcode("")
   }
 
   function changeQty(id, delta) {
-    setCart(
-      cart.map(p => {
-        if (p.id !== id) return p
+    setCart(cart.map(p => {
+      if (p.id !== id) return p
 
-        const newQty = p.quantity + delta
-        if (newQty <= 0) return p
-        if (newQty > p.stock) {
-          alert("No hay más stock")
-          return p
-        }
+      const newQty = p.quantity + delta
+      if (newQty <= 0) return p
+      if (newQty > p.stock) return p
 
-        return { ...p, quantity: newQty }
-      })
-    )
+      return { ...p, quantity: newQty }
+    }))
   }
 
   function removeProduct(id) {
@@ -92,45 +64,53 @@ export default function Sales({ profile }) {
     0
   )
 
-  // 💰 Finalizar venta (FIX SIN CAMBIAR TU LÓGICA)
   async function finalizeSale() {
     if (cart.length === 0) return
 
+    const ticket = Date.now()
+
+    // 🧾 1. Crear venta principal
+    const { data: sale, error } = await supabase
+      .from("sales")
+      .insert({
+        sold_by: profile?.id,
+        total,
+        payment_method: payment,
+        ticket_number: ticket
+      })
+      .select()
+      .single()
+
+    if (error) {
+      alert("Error al guardar venta")
+      console.log(error)
+      return
+    }
+
+    // 📦 2. Guardar productos vendidos
+    const items = cart.map(item => ({
+      sale_id: sale.id,
+      product_id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      subtotal: item.price * item.quantity
+    }))
+
+    await supabase.from("sale_items").insert(items)
+
+    // 📉 3. Descontar stock
     for (const item of cart) {
-
-      const { error: saleError } = await supabase
-        .from("sales")
-        .insert({
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          total: item.price * item.quantity,
-          product_id: item.id,
-          sold_by: profile?.id,
-          payment_method: payment
-        })
-
-      if (saleError) {
-        console.error("ERROR SALES:", saleError)
-        alert("Error al guardar venta")
-        return
-      }
-
-      const { error: stockError } = await supabase
+      await supabase
         .from("products")
         .update({
           stock: item.stock - item.quantity
         })
         .eq("id", item.id)
-
-      if (stockError) {
-        console.error("ERROR STOCK:", stockError)
-        alert("Error al actualizar stock")
-        return
-      }
     }
 
-    alert("Venta registrada ✅")
+    alert("Venta registrada — Ticket " + ticket)
+
     setCart([])
     loadProducts()
   }
@@ -142,7 +122,6 @@ export default function Sales({ profile }) {
       padding: 20,
       fontFamily: "Arial"
     }}>
-      {/* CABECERA */}
       <div style={{
         background: "#111",
         color: "#fff",
@@ -150,14 +129,11 @@ export default function Sales({ profile }) {
         borderRadius: 10,
         marginBottom: 20
       }}>
-        <h2 style={{ margin: 0 }}>
-           Caja
-        </h2>
+        <h2>Caja</h2>
 
         <div style={{
           display: "flex",
-          justifyContent: "space-between",
-          fontSize: 14
+          justifyContent: "space-between"
         }}>
           <div>
             {profile?.full_name}
@@ -173,37 +149,22 @@ export default function Sales({ profile }) {
         </div>
       </div>
 
-      {/* BUSCADOR */}
-      <div style={{
-        display: "flex",
-        gap: 10,
-        marginBottom: 20
-      }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         <input
-          style={{
-            flex: 1,
-            padding: 12,
-            fontSize: 18
-          }}
+          style={{ flex: 1, padding: 12, fontSize: 18 }}
           placeholder="Escanear código"
           value={barcode}
-          onChange={e =>
-            setBarcode(e.target.value)
-          }
+          onChange={e => setBarcode(e.target.value)}
         />
 
         <button
-          style={{
-            padding: "12px 20px",
-            fontSize: 18
-          }}
+          style={{ padding: "12px 20px", fontSize: 18 }}
           onClick={addProduct}
         >
           Agregar
         </button>
       </div>
 
-      {/* CARRITO */}
       <div style={{
         minHeight: 200,
         border: "1px solid #ddd",
@@ -212,20 +173,16 @@ export default function Sales({ profile }) {
         marginBottom: 20
       }}>
         {cart.length === 0 ? (
-          <p style={{ color: "#888" }}>
-            Carrito vacío
-          </p>
+          <p>Carrito vacío</p>
         ) : (
           cart.map(item => (
             <div
               key={item.id}
               style={{
                 display: "flex",
-                justifyContent:
-                  "space-between",
+                justifyContent: "space-between",
                 padding: 10,
-                borderBottom:
-                  "1px solid #eee"
+                borderBottom: "1px solid #eee"
               }}
             >
               <div>
@@ -235,38 +192,16 @@ export default function Sales({ profile }) {
               </div>
 
               <div>
-                <button
-                  onClick={() =>
-                    changeQty(item.id, -1)
-                  }
-                >
-                  -
-                </button>
-
+                <button onClick={() => changeQty(item.id, -1)}>-</button>
                 {item.quantity}
-
-                <button
-                  onClick={() =>
-                    changeQty(item.id, 1)
-                  }
-                >
-                  +
-                </button>
-
-                <button
-                  onClick={() =>
-                    removeProduct(item.id)
-                  }
-                >
-                  X
-                </button>
+                <button onClick={() => changeQty(item.id, 1)}>+</button>
+                <button onClick={() => removeProduct(item.id)}>X</button>
               </div>
             </div>
           ))
         )}
       </div>
 
-      {/* TOTAL */}
       <div style={{
         fontSize: 32,
         fontWeight: "bold",
@@ -276,31 +211,15 @@ export default function Sales({ profile }) {
         Total: S/{total.toFixed(2)}
       </div>
 
-      {/* PAGO */}
-      <div style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "center"
-      }}>
+      <div style={{ display: "flex", gap: 10 }}>
         <select
-          style={{
-            padding: 10,
-            fontSize: 16
-          }}
+          style={{ padding: 10 }}
           value={payment}
-          onChange={e =>
-            setPayment(e.target.value)
-          }
+          onChange={e => setPayment(e.target.value)}
         >
-          <option value="efectivo">
-            Efectivo
-          </option>
-          <option value="tarjeta">
-            Tarjeta
-          </option>
-          <option value="qr">
-            QR
-          </option>
+          <option value="efectivo">Efectivo</option>
+          <option value="tarjeta">Tarjeta</option>
+          <option value="qr">QR</option>
         </select>
 
         <button
@@ -315,7 +234,7 @@ export default function Sales({ profile }) {
           }}
           onClick={finalizeSale}
         >
-           COBRAR
+          COBRAR
         </button>
       </div>
     </div>
