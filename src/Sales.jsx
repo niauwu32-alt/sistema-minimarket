@@ -64,6 +64,7 @@ export default function Sales({ profile }) {
     0
   )
 
+  // 💳 FUNCIÓN CORREGIDA — TICKET REAL
   async function finalizeSale() {
     if (cart.length === 0) return
 
@@ -73,15 +74,15 @@ export default function Sales({ profile }) {
     const { data: sale, error } = await supabase
       .from("sales")
       .insert({
-        sold_by: profile?.id,
-        total,
+        sold_by: profile?.id || null,
+        total: total || 0,
         payment_method: payment,
         ticket_number: ticket
       })
       .select()
       .single()
 
-    if (error) {
+    if (error || !sale) {
       alert("Error al guardar venta")
       console.log(error)
       return
@@ -91,13 +92,20 @@ export default function Sales({ profile }) {
     const items = cart.map(item => ({
       sale_id: sale.id,
       product_id: item.id,
-      name: item.name,
-      price: item.price,
+      name: item.name || "Producto",
+      price: item.price ?? 0,
       quantity: item.quantity,
-      subtotal: item.price * item.quantity
+      total: (item.price ?? 0) * item.quantity   // 🔥 CAMBIO IMPORTANTE
     }))
 
-    await supabase.from("sale_items").insert(items)
+    const { error: itemsError } =
+      await supabase.from("sale_items").insert(items)
+
+    if (itemsError) {
+      console.log(itemsError)
+      alert("Error al guardar productos del ticket")
+      return
+    }
 
     // 📉 3. Descontar stock
     for (const item of cart) {
