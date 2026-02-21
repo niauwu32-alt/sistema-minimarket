@@ -64,13 +64,44 @@ export default function Sales({ profile }) {
     0
   )
 
-  // 💳 FUNCIÓN CORREGIDA — TICKET REAL
+  // 🖨️ TICKET IMPRIMIBLE
+  function printTicket(ticket, items) {
+    const html = `
+    <div style="font-family: monospace; width: 280px;">
+      <h3>MINIMARKET</h3>
+      <hr/>
+      Ticket: ${ticket}
+      <br/>
+      Cajero: ${profile?.full_name || ""}
+      <br/>
+      DNI: ${profile?.dni || ""}
+      <br/>
+      ${new Date().toLocaleString()}
+      <hr/>
+      ${items.map(i =>
+        `${i.name} x${i.quantity}  S/${(i.price * i.quantity).toFixed(2)}`
+      ).join("<br/>")}
+      <hr/>
+      TOTAL: S/${total.toFixed(2)}
+      <br/>
+      Pago: ${payment}
+      <hr/>
+      Gracias por su compra
+    </div>
+    `
+    const w = window.open("", "", "width=300,height=600")
+    w.document.write(html)
+    w.document.close()
+    w.print()
+  }
+
+  // 💳 FUNCIÓN PRINCIPAL
   async function finalizeSale() {
     if (cart.length === 0) return
 
     const ticket = Date.now()
 
-    // 🧾 1. Crear venta principal
+    // 🧾 1. Venta principal
     const { data: sale, error } = await supabase
       .from("sales")
       .insert({
@@ -88,14 +119,14 @@ export default function Sales({ profile }) {
       return
     }
 
-    // 📦 2. Guardar productos vendidos
+    // 📦 2. Detalle de productos
     const items = cart.map(item => ({
       sale_id: sale.id,
       product_id: item.id,
       name: item.name || "Producto",
       price: item.price ?? 0,
       quantity: item.quantity,
-      total: (item.price ?? 0) * item.quantity   // 🔥 CAMBIO IMPORTANTE
+      total: (item.price ?? 0) * item.quantity
     }))
 
     const { error: itemsError } =
@@ -116,6 +147,9 @@ export default function Sales({ profile }) {
         })
         .eq("id", item.id)
     }
+
+    // 🖨️ 4. IMPRIMIR
+    printTicket(ticket, cart)
 
     alert("Venta registrada — Ticket " + ticket)
 
