@@ -64,38 +64,39 @@ export default function Sales({ profile }) {
     0
   )
 
-  // 🖨️ TICKET IMPRIMIBLE
-  function printTicket(ticket, items) {
-    const html = `
-    <div style="font-family: monospace; width: 280px;">
-      <h3>MINIMARKET</h3>
-      <hr/>
-      Ticket: ${ticket}
-      <br/>
-      Cajero: ${profile?.full_name || ""}
-      <br/>
-      DNI: ${profile?.dni || ""}
-      <br/>
-      ${new Date().toLocaleString()}
-      <hr/>
-      ${items.map(i =>
-        `${i.name} x${i.quantity}  S/${(i.price * i.quantity).toFixed(2)}`
-      ).join("<br/>")}
-      <hr/>
-      TOTAL: S/${total.toFixed(2)}
-      <br/>
-      Pago: ${payment}
-      <hr/>
-      Gracias por su compra
-    </div>
+  // 🧾 IMPRIMIR TICKET
+  function printTicket(ticket) {
+    const content = `
+      <div style="font-family: monospace; width: 280px;">
+        <h3>MINIMARKET</h3>
+        <hr/>
+        Ticket: ${ticket}
+        <br/>
+        Cajero: ${profile?.full_name || ""}
+        <br/>
+        DNI: ${profile?.dni || ""}
+        <br/>
+        ${new Date().toLocaleString()}
+        <hr/>
+        ${cart.map(i =>
+          `${i.name} x${i.quantity}  S/${(i.price * i.quantity).toFixed(2)}`
+        ).join("<br/>")}
+        <hr/>
+        TOTAL: S/${total.toFixed(2)}
+        <br/>
+        Pago: ${payment}
+        <hr/>
+        Gracias por su compra
+      </div>
     `
-    const w = window.open("", "", "width=300,height=600")
-    w.document.write(html)
-    w.document.close()
-    w.print()
+
+    const win = window.open("", "", "width=300,height=600")
+    win.document.write(content)
+    win.document.close()
+    win.print()
   }
 
-  // 💳 FUNCIÓN PRINCIPAL
+  // 💳 VENTA REAL
   async function finalizeSale() {
     if (cart.length === 0) return
 
@@ -106,7 +107,7 @@ export default function Sales({ profile }) {
       .from("sales")
       .insert({
         sold_by: profile?.id || null,
-        total: total || 0,
+        total: total,
         payment_method: payment,
         ticket_number: ticket
       })
@@ -114,19 +115,18 @@ export default function Sales({ profile }) {
       .single()
 
     if (error || !sale) {
-      alert("Error al guardar venta")
       console.log(error)
-      return
+      return alert("Error al guardar venta")
     }
 
-    // 📦 2. Detalle de productos
+    // 📦 2. Items
     const items = cart.map(item => ({
       sale_id: sale.id,
       product_id: item.id,
-      name: item.name || "Producto",
-      price: item.price ?? 0,
+      name: item.name,
+      price: item.price,
       quantity: item.quantity,
-      total: (item.price ?? 0) * item.quantity
+      total: item.price * item.quantity
     }))
 
     const { error: itemsError } =
@@ -134,22 +134,28 @@ export default function Sales({ profile }) {
 
     if (itemsError) {
       console.log(itemsError)
-      alert("Error al guardar productos del ticket")
-      return
+      return alert("Error al guardar items")
     }
 
-    // 📉 3. Descontar stock
+    // 📉 3. STOCK CORRECTO (leer stock actual)
     for (const item of cart) {
+
+      const { data: current } = await supabase
+        .from("products")
+        .select("stock")
+        .eq("id", item.id)
+        .single()
+
+      const newStock =
+        (current?.stock || 0) - item.quantity
+
       await supabase
         .from("products")
-        .update({
-          stock: item.stock - item.quantity
-        })
+        .update({ stock: newStock })
         .eq("id", item.id)
     }
 
-    // 🖨️ 4. IMPRIMIR
-    printTicket(ticket, cart)
+    printTicket(ticket)
 
     alert("Venta registrada — Ticket " + ticket)
 
