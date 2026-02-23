@@ -2,11 +2,15 @@ import { useState, useEffect } from "react"
 import { supabase } from "./supabaseClient"
 
 export default function Sales({ profile }) {
+
   const [barcode, setBarcode] = useState("")
   const [cart, setCart] = useState([])
   const [products, setProducts] = useState([])
   const [payment, setPayment] = useState("efectivo")
   const [time, setTime] = useState(new Date())
+
+  // 🔥 NUEVO — evitar doble cobro
+  const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
     const i = setInterval(() => setTime(new Date()), 1000)
@@ -41,6 +45,14 @@ export default function Sales({ profile }) {
     }
 
     setBarcode("")
+  }
+
+  // 🔥 ENTER = agregar producto (lector real)
+  function handleKeyDown(e) {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      addProduct()
+    }
   }
 
   function changeQty(id, delta) {
@@ -98,7 +110,12 @@ export default function Sales({ profile }) {
 
   // 💳 VENTA REAL
   async function finalizeSale() {
+
     if (cart.length === 0) return
+
+    // 🔥 evita doble click
+    if (processing) return
+    setProcessing(true)
 
     const ticket = Date.now()
 
@@ -116,6 +133,7 @@ export default function Sales({ profile }) {
 
     if (error || !sale) {
       console.log(error)
+      setProcessing(false)
       return alert("Error al guardar venta")
     }
 
@@ -134,10 +152,11 @@ export default function Sales({ profile }) {
 
     if (itemsError) {
       console.log(itemsError)
+      setProcessing(false)
       return alert("Error al guardar items")
     }
 
-    // 📉 3. STOCK CORRECTO (leer stock actual)
+    // 📉 3. STOCK CORRECTO
     for (const item of cart) {
 
       const { data: current } = await supabase
@@ -161,6 +180,7 @@ export default function Sales({ profile }) {
 
     setCart([])
     loadProducts()
+    setProcessing(false)
   }
 
   return (
@@ -203,6 +223,7 @@ export default function Sales({ profile }) {
           placeholder="Escanear código"
           value={barcode}
           onChange={e => setBarcode(e.target.value)}
+          onKeyDown={handleKeyDown}   // 🔥 ENTER para agregar
         />
 
         <button
