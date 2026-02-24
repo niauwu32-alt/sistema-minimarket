@@ -5,10 +5,9 @@ import Sales from "./Sales"
 export default function CashSession({ profile }) {
 
   const [session, setSession] = useState(null)
+  const [openingAmount, setOpeningAmount] = useState("")
+  const [closingAmount, setClosingAmount] = useState("")
   const [loading, setLoading] = useState(true)
-
-  const [opening, setOpening] = useState("")
-  const [closing, setClosing] = useState("")
 
   useEffect(() => {
     loadSession()
@@ -16,10 +15,15 @@ export default function CashSession({ profile }) {
 
   async function loadSession() {
 
+    if (!profile?.id) {
+      setLoading(false)
+      return
+    }
+
     const { data } = await supabase
       .from("cash_sessions")
       .select("*")
-      .eq("opened_by", profile?.id)
+      .eq("opened_by", profile.id)
       .eq("status", "open")
       .single()
 
@@ -27,16 +31,17 @@ export default function CashSession({ profile }) {
     setLoading(false)
   }
 
-  // 🔓 ABRIR CAJA
+  // 🔓 APERTURA
   async function openCash() {
 
-    const amount = parseFloat(opening || 0)
+    if (!openingAmount) return alert("Ingrese monto inicial")
 
     const { data } = await supabase
       .from("cash_sessions")
       .insert({
-        opened_by: profile?.id,
-        opening_amount: amount
+        opened_by: profile.id,
+        opening_amount: Number(openingAmount),
+        status: "open"
       })
       .select()
       .single()
@@ -44,65 +49,83 @@ export default function CashSession({ profile }) {
     setSession(data)
   }
 
-  // 🔒 CERRAR CAJA
+  // 🔒 CIERRE PROFESIONAL REAL
   async function closeCash() {
 
-    const counted = parseFloat(closing || 0)
+    if (!closingAmount) return alert("Ingrese monto contado")
 
-    // 🔥 calcular ventas del turno
+    // 🔹 Ventas desde apertura
     const { data: sales } = await supabase
       .from("sales")
-      .select("*")
+      .select("total, payment_method")
       .gte("created_at", session.opened_at)
 
-    let total = 0
-    let cash = 0
-    let card = 0
-    let qr = 0
+    let cashSales = 0
+    let totalSales = 0
+    let cardSales = 0
+    let qrSales = 0
 
     sales?.forEach(s => {
-      total += s.total || 0
 
-      if (s.payment_method === "efectivo") cash += s.total
-      if (s.payment_method === "tarjeta") card += s.total
-      if (s.payment_method === "qr") qr += s.total
+      totalSales += Number(s.total)
+
+      if (s.payment_method === "efectivo")
+        cashSales += Number(s.total)
+
+      if (s.payment_method === "tarjeta")
+        cardSales += Number(s.total)
+
+      if (s.payment_method === "qr")
+        qrSales += Number(s.total)
     })
 
-    const expected = session.opening_amount + cash
-    const diff = counted - expected
+    // 🔥 Cálculo real
+    const expected =
+      Number(session.opening_amount) +
+      cashSales
+
+    const difference =
+      Number(closingAmount) - expected
 
     await supabase
       .from("cash_sessions")
       .update({
-        closed_at: new Date(),
-        closing_amount: counted,
+        closing_amount: Number(closingAmount),
         expected_amount: expected,
-        difference: diff,
-        total_sales: total,
-        cash_sales: cash,
-        card_sales: card,
-        qr_sales: qr,
-        status: "closed"
+        difference: difference,
+        total_sales: totalSales,
+        cash_sales: cashSales,
+        card_sales: cardSales,
+        qr_sales: qrSales,
+        status: "closed",
+        closed_at: new Date()
       })
       .eq("id", session.id)
 
-    alert("Caja cerrada correctamente")
+    alert(
+      "Caja cerrada\n\n" +
+      "Esperado: S/ " + expected +
+      "\nContado: S/ " + closingAmount +
+      "\nDiferencia: S/ " + difference
+    )
 
     setSession(null)
+    setClosingAmount("")
   }
 
-  if (loading) return <p>Cargando caja...</p>
+  if (loading) return <p>Cargando caja…</p>
 
-  // 🔓 SIN CAJA ABIERTA
+  // 🔓 SI NO HAY CAJA ABIERTA
   if (!session) {
     return (
-      <div style={{ padding: 30 }}>
+      <div style={{ padding: 40 }}>
         <h2>Apertura de caja</h2>
 
         <input
+          type="number"
           placeholder="Monto inicial"
-          value={opening}
-          onChange={e => setOpening(e.target.value)}
+          value={openingAmount}
+          onChange={e => setOpeningAmount(e.target.value)}
         />
 
         <button onClick={openCash}>
@@ -112,23 +135,24 @@ export default function CashSession({ profile }) {
     )
   }
 
-  // 🔥 CAJA ABIERTA — MOSTRAR POS
+  // 🔒 CAJA ABIERTA → POS
   return (
     <div>
 
       <Sales profile={profile} />
 
       <div style={{
-        marginTop: 20,
         padding: 20,
-        borderTop: "2px solid #ddd"
+        borderTop: "2px solid #000",
+        marginTop: 20
       }}>
-        <h3>Cerrar caja</h3>
+        <h3>Cierre de caja</h3>
 
         <input
+          type="number"
           placeholder="Efectivo contado"
-          value={closing}
-          onChange={e => setClosing(e.target.value)}
+          value={closingAmount}
+          onChange={e => setClosingAmount(e.target.value)}
         />
 
         <button onClick={closeCash}>
