@@ -3,6 +3,9 @@ import { useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
 import Sales from "./Sales"
 
+// 🔥 AGREGADO — SISTEMA DE CAJA
+import CashSession from "./CashSession"
+
 export default function Dashboard({ session }) {
 
   const [profile, setProfile] = useState(null)
@@ -41,13 +44,13 @@ export default function Dashboard({ session }) {
 
       {isTouchDevice ? (
 
-        // 📱 INVENTARIO
+        // 📱 INVENTARIO (CELULAR — NO SE TOCA)
         <ProductsMobile />
 
       ) : (
 
-        // 💻 CAJA
-        <Sales profile={profile} />
+        // 💻 CAJA PROFESIONAL (PC)
+        <CashSession profile={profile} />
 
       )}
 
