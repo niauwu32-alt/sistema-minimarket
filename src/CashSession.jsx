@@ -5,27 +5,23 @@ import Sales from "./Sales"
 export default function CashSession({ profile }) {
 
   const [session, setSession] = useState(null)
-  const [openingAmount, setOpeningAmount] = useState("")
-  const [closingAmount, setClosingAmount] = useState("")
   const [loading, setLoading] = useState(true)
+
+  const [opening, setOpening] = useState("")
+  const [closing, setClosing] = useState("")
 
   useEffect(() => {
     loadSession()
-  }, [profile])
+  }, [])
 
   async function loadSession() {
-
-    if (!profile?.id) {
-      setLoading(false)
-      return
-    }
 
     const { data } = await supabase
       .from("cash_sessions")
       .select("*")
-      .eq("opened_by", profile.id)
+      .eq("opened_by", profile?.id)
       .eq("status", "open")
-      .maybeSingle()
+      .single()
 
     setSession(data || null)
     setLoading(false)
@@ -34,27 +30,16 @@ export default function CashSession({ profile }) {
   // 🔓 ABRIR CAJA
   async function openCash() {
 
-    const amount = Number(openingAmount)
+    const amount = parseFloat(opening || 0)
 
-    if (openingAmount === "") {
-      alert("Ingrese monto inicial")
-      return
-    }
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("cash_sessions")
       .insert({
-        opened_by: profile.id,
+        opened_by: profile?.id,
         opening_amount: amount
       })
       .select()
       .single()
-
-    if (error) {
-      console.log(error)
-      alert("Error al abrir caja")
-      return
-    }
 
     setSession(data)
   }
@@ -62,98 +47,91 @@ export default function CashSession({ profile }) {
   // 🔒 CERRAR CAJA
   async function closeCash() {
 
-    const real = Number(closingAmount)
+    const counted = parseFloat(closing || 0)
 
-    if (closingAmount === "") {
-      alert("Ingrese monto contado")
-      return
-    }
-
-    // 💰 calcular ventas de esta sesión
+    // 🔥 calcular ventas del turno
     const { data: sales } = await supabase
       .from("sales")
-      .select("total")
-      .eq("session_id", session.id)
+      .select("*")
+      .gte("created_at", session.opened_at)
 
-    const totalSales =
-      sales?.reduce((sum, s) => sum + Number(s.total || 0), 0) || 0
+    let total = 0
+    let cash = 0
+    let card = 0
+    let qr = 0
 
-    const systemAmount =
-      Number(session.opening_amount) + totalSales
+    sales?.forEach(s => {
+      total += s.total || 0
 
-    const difference = real - systemAmount
+      if (s.payment_method === "efectivo") cash += s.total
+      if (s.payment_method === "tarjeta") card += s.total
+      if (s.payment_method === "qr") qr += s.total
+    })
 
-    const { error } = await supabase
+    const expected = session.opening_amount + cash
+    const diff = counted - expected
+
+    await supabase
       .from("cash_sessions")
       .update({
-        closing_amount: real,
-        system_amount: systemAmount,
-        difference: difference,
-        status: "closed",
-        closed_at: new Date()
+        closed_at: new Date(),
+        closing_amount: counted,
+        expected_amount: expected,
+        difference: diff,
+        total_sales: total,
+        cash_sales: cash,
+        card_sales: card,
+        qr_sales: qr,
+        status: "closed"
       })
       .eq("id", session.id)
-
-    if (error) {
-      console.log(error)
-      alert("Error al cerrar caja")
-      return
-    }
 
     alert("Caja cerrada correctamente")
 
     setSession(null)
-    setOpeningAmount("")
-    setClosingAmount("")
   }
 
-  if (loading) return <p>Cargando caja…</p>
+  if (loading) return <p>Cargando caja...</p>
 
-  // 🔓 PANTALLA APERTURA
+  // 🔓 SIN CAJA ABIERTA
   if (!session) {
     return (
-      <div style={{ padding: 30, maxWidth: 500, margin: "auto" }}>
+      <div style={{ padding: 30 }}>
         <h2>Apertura de caja</h2>
 
         <input
-          type="number"
           placeholder="Monto inicial"
-          value={openingAmount}
-          onChange={e => setOpeningAmount(e.target.value)}
-          style={{ width: "100%", padding: 12, marginBottom: 10 }}
+          value={opening}
+          onChange={e => setOpening(e.target.value)}
         />
 
-        <button
-          onClick={openCash}
-          style={{ width: "100%", padding: 15 }}
-        >
+        <button onClick={openCash}>
           Abrir caja
         </button>
       </div>
     )
   }
 
-  // 🟢 CAJA ABIERTA → POS
+  // 🔥 CAJA ABIERTA — MOSTRAR POS
   return (
     <div>
 
-      <Sales profile={profile} sessionId={session.id} />
+      <Sales profile={profile} />
 
-      <div style={{ padding: 20 }}>
-        <h3>Cierre de caja</h3>
+      <div style={{
+        marginTop: 20,
+        padding: 20,
+        borderTop: "2px solid #ddd"
+      }}>
+        <h3>Cerrar caja</h3>
 
         <input
-          type="number"
-          placeholder="Dinero contado"
-          value={closingAmount}
-          onChange={e => setClosingAmount(e.target.value)}
-          style={{ width: "100%", padding: 12, marginBottom: 10 }}
+          placeholder="Efectivo contado"
+          value={closing}
+          onChange={e => setClosing(e.target.value)}
         />
 
-        <button
-          onClick={closeCash}
-          style={{ width: "100%", padding: 15 }}
-        >
+        <button onClick={closeCash}>
           Cerrar caja
         </button>
       </div>
