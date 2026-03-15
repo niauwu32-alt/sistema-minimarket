@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { supabase } from "./supabaseClient"
 import Sales from "./Sales"
 
 export default function CashSession({ profile }) {
 
   const [session, setSession] = useState(null)
-  const [openingAmount, setOpeningAmount] = useState("")
-  const [closingAmount, setClosingAmount] = useState("")
   const [loading, setLoading] = useState(true)
+
+  const [opening, setOpening] = useState("")
+  const [showClose, setShowClose] = useState(false)
+  const [closingAmount, setClosingAmount] = useState("")
 
   useEffect(() => {
     loadSession()
@@ -25,140 +27,225 @@ export default function CashSession({ profile }) {
       .select("*")
       .eq("opened_by", profile.id)
       .eq("status", "open")
-      .single()
+      .maybeSingle()
 
     setSession(data || null)
     setLoading(false)
   }
 
-  // 🔓 APERTURA
+  // ABRIR CAJA
   async function openCash() {
 
-    if (!openingAmount) return alert("Ingrese monto inicial")
+    if (!opening) return alert("Ingrese monto inicial")
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("cash_sessions")
       .insert({
         opened_by: profile.id,
-        opening_amount: Number(openingAmount),
+        opening_amount: Number(opening),
         status: "open"
       })
       .select()
       .single()
 
+    if (error) {
+      console.log(error)
+      alert("Error al abrir caja")
+      return
+    }
+
     setSession(data)
   }
 
-  // 🔒 CIERRE PROFESIONAL REAL
+  // CERRAR CAJA
   async function closeCash() {
 
-    if (!closingAmount) return alert("Ingrese monto contado")
+    if (!closingAmount)
+      return alert("Ingrese dinero contado")
 
-    // 🔹 Ventas desde apertura
     const { data: sales } = await supabase
       .from("sales")
-      .select("total, payment_method")
-      .gte("created_at", session.opened_at)
+      .select("total,payment_method")
+      .eq("session_id", session.id)
 
-    let cashSales = 0
-    let totalSales = 0
-    let cardSales = 0
-    let qrSales = 0
+    let efectivo = 0
 
     sales?.forEach(s => {
-
-      totalSales += Number(s.total)
-
       if (s.payment_method === "efectivo")
-        cashSales += Number(s.total)
-
-      if (s.payment_method === "tarjeta")
-        cardSales += Number(s.total)
-
-      if (s.payment_method === "qr")
-        qrSales += Number(s.total)
+        efectivo += Number(s.total)
     })
 
-    // 🔥 Cálculo real
     const expected =
-      Number(session.opening_amount) +
-      cashSales
+      Number(session.opening_amount) + efectivo
 
-    const difference =
+    const diff =
       Number(closingAmount) - expected
 
-    await supabase
+    const { error } = await supabase
       .from("cash_sessions")
       .update({
         closing_amount: Number(closingAmount),
         expected_amount: expected,
-        difference: difference,
-        total_sales: totalSales,
-        cash_sales: cashSales,
-        card_sales: cardSales,
-        qr_sales: qrSales,
+        difference: diff,
         status: "closed",
         closed_at: new Date()
       })
       .eq("id", session.id)
 
+    if (error) {
+      console.log(error)
+      alert("Error al cerrar caja")
+      return
+    }
+
     alert(
-      "Caja cerrada\n\n" +
-      "Esperado: S/ " + expected +
-      "\nContado: S/ " + closingAmount +
-      "\nDiferencia: S/ " + difference
+      "Caja cerrada\n" +
+      "Esperado: S/" + expected +
+      "\nContado: S/" + closingAmount +
+      "\nDiferencia: S/" + diff
     )
 
     setSession(null)
+    setShowClose(false)
     setClosingAmount("")
+  }
+
+  // SALIR DEL SISTEMA
+  async function logout() {
+    await supabase.auth.signOut()
+    location.reload()
   }
 
   if (loading) return <p>Cargando caja…</p>
 
-  // 🔓 SI NO HAY CAJA ABIERTA
+  // SI NO HAY CAJA ABIERTA
   if (!session) {
     return (
       <div style={{ padding: 40 }}>
+
         <h2>Apertura de caja</h2>
 
         <input
           type="number"
           placeholder="Monto inicial"
-          value={openingAmount}
-          onChange={e => setOpeningAmount(e.target.value)}
+          value={opening}
+          onChange={e => setOpening(e.target.value)}
         />
 
-        <button onClick={openCash}>
-          Abrir caja
-        </button>
+        <div style={{ marginTop: 10 }}>
+
+          <button onClick={openCash}>
+            Abrir caja
+          </button>
+
+          <button
+            style={{ marginLeft: 10 }}
+            onClick={logout}
+          >
+            Salir
+          </button>
+
+        </div>
+
       </div>
     )
   }
 
-  // 🔒 CAJA ABIERTA → POS
   return (
     <div>
 
-      <Sales profile={profile} />
-
+      {/* BARRA SUPERIOR */}
       <div style={{
-        padding: 20,
-        borderTop: "2px solid #000",
-        marginTop: 20
+        background: "#111",
+        color: "white",
+        padding: 12,
+        display: "flex",
+        justifyContent: "space-between"
       }}>
-        <h3>Cierre de caja</h3>
 
-        <input
-          type="number"
-          placeholder="Efectivo contado"
-          value={closingAmount}
-          onChange={e => setClosingAmount(e.target.value)}
-        />
+        <div>
+          Caja abierta — Inicio S/ {session.opening_amount}
+        </div>
 
-        <button onClick={closeCash}>
-          Cerrar caja
-        </button>
+        <div>
+
+          <button
+            onClick={() => setShowClose(true)}
+          >
+            Cerrar turno
+          </button>
+
+          <button
+            style={{ marginLeft: 10 }}
+            onClick={logout}
+          >
+            Salir
+          </button>
+
+        </div>
+
       </div>
+
+      {/* POS */}
+      <Sales
+        profile={profile}
+        sessionId={session.id}
+      />
+
+      {/* MODAL CIERRE */}
+      {showClose && (
+
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.6)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center"
+        }}>
+
+          <div style={{
+            background: "white",
+            padding: 30,
+            minWidth: 300
+          }}>
+
+            <h3>Cierre de caja</h3>
+
+            <input
+              type="number"
+              placeholder="Dinero contado"
+              value={closingAmount}
+              onChange={e =>
+                setClosingAmount(e.target.value)
+              }
+            />
+
+            <div style={{ marginTop: 15 }}>
+
+              <button onClick={closeCash}>
+                Confirmar cierre
+              </button>
+
+              <button
+                style={{ marginLeft: 10 }}
+                onClick={() =>
+                  setShowClose(false)
+                }
+              >
+                Cancelar
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
 
     </div>
   )
