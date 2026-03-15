@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { supabase } from "./supabaseClient"
 
-export default function Sales({ profile }) {
+export default function Sales({ profile, sessionId }) {
 
   const [barcode, setBarcode] = useState("")
   const [cart, setCart] = useState([])
@@ -9,66 +9,114 @@ export default function Sales({ profile }) {
   const [payment, setPayment] = useState("efectivo")
   const [time, setTime] = useState(new Date())
 
-  // 🔥 NUEVO — evitar doble cobro
-  const [processing, setProcessing] = useState(false)
+  const barcodeRef = useRef(null)
 
+  // Hora en vivo
   useEffect(() => {
-    const i = setInterval(() => setTime(new Date()), 1000)
+    const i = setInterval(() => {
+      setTime(new Date())
+    }, 1000)
+
     return () => clearInterval(i)
   }, [])
 
+  // Mantener input activo
+  useEffect(() => {
+    barcodeRef.current?.focus()
+  }, [])
+
+  // Cargar productos
   useEffect(() => {
     loadProducts()
   }, [])
 
   async function loadProducts() {
-    const { data } = await supabase.from("products").select("*")
+
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+
     setProducts(data || [])
   }
 
+  // AGREGAR PRODUCTO
   function addProduct() {
-    const product = products.find(p => p.barcode === barcode)
 
-    if (!product) return alert("Producto no encontrado")
-    if (product.stock <= 0) return alert("SIN STOCK")
+    let code = barcode
+    let qty = 1
 
-    const existing = cart.find(p => p.id === product.id)
+    // cantidad rápida: 2*750123
+    if (barcode.includes("*")) {
+
+      const parts = barcode.split("*")
+
+      qty = parseInt(parts[0])
+      code = parts[1]
+    }
+
+    const product = products.find(
+      p => p.barcode === code
+    )
+
+    if (!product) {
+      alert("Producto no encontrado")
+      return
+    }
+
+    if (product.stock <= 0) {
+      alert("SIN STOCK")
+      return
+    }
+
+    const existing = cart.find(
+      p => p.id === product.id
+    )
 
     if (existing) {
-      setCart(cart.map(p =>
-        p.id === product.id
-          ? { ...p, quantity: p.quantity + 1 }
-          : p
-      ))
+
+      setCart(
+        cart.map(p =>
+          p.id === product.id
+            ? { ...p, quantity: p.quantity + qty }
+            : p
+        )
+      )
+
     } else {
-      setCart([...cart, { ...product, quantity: 1 }])
+
+      setCart([
+        ...cart,
+        { ...product, quantity: qty }
+      ])
+
     }
 
     setBarcode("")
-  }
-
-  // 🔥 ENTER = agregar producto (lector real)
-  function handleKeyDown(e) {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      addProduct()
-    }
+    barcodeRef.current?.focus()
   }
 
   function changeQty(id, delta) {
-    setCart(cart.map(p => {
-      if (p.id !== id) return p
 
-      const newQty = p.quantity + delta
-      if (newQty <= 0) return p
-      if (newQty > p.stock) return p
+    setCart(
+      cart.map(p => {
 
-      return { ...p, quantity: newQty }
-    }))
+        if (p.id !== id) return p
+
+        const newQty = p.quantity + delta
+
+        if (newQty <= 0) return p
+        if (newQty > p.stock) return p
+
+        return { ...p, quantity: newQty }
+      })
+    )
   }
 
   function removeProduct(id) {
-    setCart(cart.filter(p => p.id !== id))
+
+    setCart(
+      cart.filter(p => p.id !== id)
+    )
   }
 
   const total = cart.reduce(
@@ -76,69 +124,35 @@ export default function Sales({ profile }) {
     0
   )
 
-  // 🧾 IMPRIMIR TICKET
-  function printTicket(ticket) {
-    const content = `
-      <div style="font-family: monospace; width: 280px;">
-        <h3>MINIMARKET</h3>
-        <hr/>
-        Ticket: ${ticket}
-        <br/>
-        Cajero: ${profile?.full_name || ""}
-        <br/>
-        DNI: ${profile?.dni || ""}
-        <br/>
-        ${new Date().toLocaleString()}
-        <hr/>
-        ${cart.map(i =>
-          `${i.name} x${i.quantity}  S/${(i.price * i.quantity).toFixed(2)}`
-        ).join("<br/>")}
-        <hr/>
-        TOTAL: S/${total.toFixed(2)}
-        <br/>
-        Pago: ${payment}
-        <hr/>
-        Gracias por su compra
-      </div>
-    `
-
-    const win = window.open("", "", "width=300,height=600")
-    win.document.write(content)
-    win.document.close()
-    win.print()
-  }
-
-  // 💳 VENTA REAL
+  // FINALIZAR VENTA
   async function finalizeSale() {
 
     if (cart.length === 0) return
 
-    // 🔥 evita doble click
-    if (processing) return
-    setProcessing(true)
-
     const ticket = Date.now()
 
-    // 🧾 1. Venta principal
     const { data: sale, error } = await supabase
       .from("sales")
       .insert({
         sold_by: profile?.id || null,
         total: total,
         payment_method: payment,
-        ticket_number: ticket
+        ticket_number: ticket,
+        session_id: sessionId
       })
       .select()
       .single()
 
     if (error || !sale) {
+
       console.log(error)
-      setProcessing(false)
-      return alert("Error al guardar venta")
+      alert("Error al guardar venta")
+
+      return
     }
 
-    // 📦 2. Items
     const items = cart.map(item => ({
+
       sale_id: sale.id,
       product_id: item.id,
       name: item.name,
@@ -148,15 +162,19 @@ export default function Sales({ profile }) {
     }))
 
     const { error: itemsError } =
-      await supabase.from("sale_items").insert(items)
+      await supabase
+        .from("sale_items")
+        .insert(items)
 
     if (itemsError) {
+
       console.log(itemsError)
-      setProcessing(false)
-      return alert("Error al guardar items")
+      alert("Error al guardar items")
+
+      return
     }
 
-    // 📉 3. STOCK CORRECTO
+    // actualizar stock
     for (const item of cart) {
 
       const { data: current } = await supabase
@@ -170,26 +188,30 @@ export default function Sales({ profile }) {
 
       await supabase
         .from("products")
-        .update({ stock: newStock })
+        .update({
+          stock: newStock
+        })
         .eq("id", item.id)
     }
 
-    printTicket(ticket)
-
-    alert("Venta registrada — Ticket " + ticket)
+    alert("Venta registrada")
 
     setCart([])
     loadProducts()
-    setProcessing(false)
+    barcodeRef.current?.focus()
   }
 
   return (
+
     <div style={{
       maxWidth: 900,
       margin: "auto",
       padding: 20,
       fontFamily: "Arial"
     }}>
+
+      {/* CABECERA */}
+
       <div style={{
         background: "#111",
         color: "#fff",
@@ -197,42 +219,78 @@ export default function Sales({ profile }) {
         borderRadius: 10,
         marginBottom: 20
       }}>
+
         <h2>Caja</h2>
 
         <div style={{
           display: "flex",
           justifyContent: "space-between"
         }}>
+
           <div>
+
             {profile?.full_name}
             <br />
             DNI: {profile?.dni}
+
           </div>
 
-          <div style={{ textAlign: "right" }}>
+          <div style={{
+            textAlign: "right"
+          }}>
+
             {time.toLocaleDateString()}
             <br />
             {time.toLocaleTimeString()}
+
           </div>
+
         </div>
+
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+      {/* SCANER */}
+
+      <div style={{
+        display: "flex",
+        gap: 10,
+        marginBottom: 20
+      }}>
+
         <input
-          style={{ flex: 1, padding: 12, fontSize: 18 }}
+          ref={barcodeRef}
+          style={{
+            flex: 1,
+            padding: 12,
+            fontSize: 18
+          }}
           placeholder="Escanear código"
           value={barcode}
-          onChange={e => setBarcode(e.target.value)}
-          onKeyDown={handleKeyDown}   // 🔥 ENTER para agregar
+          onChange={e =>
+            setBarcode(e.target.value)
+          }
+          onKeyDown={(e) => {
+
+            if (e.key === "Enter") {
+
+              addProduct()
+            }
+          }}
         />
 
         <button
-          style={{ padding: "12px 20px", fontSize: 18 }}
+          style={{
+            padding: "12px 20px",
+            fontSize: 18
+          }}
           onClick={addProduct}
         >
           Agregar
         </button>
+
       </div>
+
+      {/* CARRITO */}
 
       <div style={{
         minHeight: 200,
@@ -241,10 +299,15 @@ export default function Sales({ profile }) {
         padding: 10,
         marginBottom: 20
       }}>
+
         {cart.length === 0 ? (
+
           <p>Carrito vacío</p>
+
         ) : (
+
           cart.map(item => (
+
             <div
               key={item.id}
               style={{
@@ -254,22 +317,54 @@ export default function Sales({ profile }) {
                 borderBottom: "1px solid #eee"
               }}
             >
+
               <div>
+
                 <b>{item.name}</b>
                 <br />
                 S/{item.price}
+
               </div>
 
               <div>
-                <button onClick={() => changeQty(item.id, -1)}>-</button>
+
+                <button
+                  onClick={() =>
+                    changeQty(item.id, -1)
+                  }
+                >
+                  -
+                </button>
+
                 {item.quantity}
-                <button onClick={() => changeQty(item.id, 1)}>+</button>
-                <button onClick={() => removeProduct(item.id)}>X</button>
+
+                <button
+                  onClick={() =>
+                    changeQty(item.id, 1)
+                  }
+                >
+                  +
+                </button>
+
+                <button
+                  onClick={() =>
+                    removeProduct(item.id)
+                  }
+                >
+                  X
+                </button>
+
               </div>
+
             </div>
+
           ))
+
         )}
+
       </div>
+
+      {/* TOTAL */}
 
       <div style={{
         fontSize: 32,
@@ -277,18 +372,40 @@ export default function Sales({ profile }) {
         textAlign: "right",
         marginBottom: 20
       }}>
+
         Total: S/{total.toFixed(2)}
+
       </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
+      {/* PAGO */}
+
+      <div style={{
+        display: "flex",
+        gap: 10
+      }}>
+
         <select
-          style={{ padding: 10 }}
+          style={{
+            padding: 10
+          }}
           value={payment}
-          onChange={e => setPayment(e.target.value)}
+          onChange={e =>
+            setPayment(e.target.value)
+          }
         >
-          <option value="efectivo">Efectivo</option>
-          <option value="tarjeta">Tarjeta</option>
-          <option value="qr">QR</option>
+
+          <option value="efectivo">
+            Efectivo
+          </option>
+
+          <option value="tarjeta">
+            Tarjeta
+          </option>
+
+          <option value="qr">
+            QR
+          </option>
+
         </select>
 
         <button
@@ -303,9 +420,14 @@ export default function Sales({ profile }) {
           }}
           onClick={finalizeSale}
         >
+
           COBRAR
+
         </button>
+
       </div>
+
     </div>
+
   )
 }
