@@ -11,9 +11,16 @@ export default function CashSession({ profile }) {
   const [showClose, setShowClose] = useState(false)
   const [closingAmount, setClosingAmount] = useState("")
 
+  const [message, setMessage] = useState(null)
+
   useEffect(() => {
     loadSession()
   }, [])
+
+  function showMessage(text) {
+    setMessage(text)
+    setTimeout(() => setMessage(null), 4000)
+  }
 
   async function loadSession() {
 
@@ -33,10 +40,12 @@ export default function CashSession({ profile }) {
     setLoading(false)
   }
 
-  // ABRIR CAJA
   async function openCash() {
 
-    if (!opening) return alert("Ingrese monto inicial")
+    if (!opening) {
+      showMessage("Ingrese monto inicial")
+      return
+    }
 
     const { data, error } = await supabase
       .from("cash_sessions")
@@ -49,19 +58,20 @@ export default function CashSession({ profile }) {
       .single()
 
     if (error) {
-      console.log(error)
-      alert("Error al abrir caja")
+      showMessage("Error al abrir caja")
       return
     }
 
     setSession(data)
+    showMessage("Caja abierta correctamente")
   }
 
-  // CERRAR CAJA
   async function closeCash() {
 
-    if (!closingAmount)
-      return alert("Ingrese dinero contado")
+    if (!closingAmount) {
+      showMessage("Ingrese dinero contado")
+      return
+    }
 
     const { data: sales } = await supabase
       .from("sales")
@@ -93,16 +103,12 @@ export default function CashSession({ profile }) {
       .eq("id", session.id)
 
     if (error) {
-      console.log(error)
-      alert("Error al cerrar caja")
+      showMessage("Error al cerrar caja")
       return
     }
 
-    alert(
-      "Caja cerrada\n" +
-      "Esperado: S/" + expected +
-      "\nContado: S/" + closingAmount +
-      "\nDiferencia: S/" + diff
+    showMessage(
+      `Turno cerrado — Esperado S/${expected} | Contado S/${closingAmount} | Dif S/${diff}`
     )
 
     setSession(null)
@@ -110,7 +116,6 @@ export default function CashSession({ profile }) {
     setClosingAmount("")
   }
 
-  // SALIR DEL SISTEMA
   async function logout() {
     await supabase.auth.signOut()
     location.reload()
@@ -118,10 +123,20 @@ export default function CashSession({ profile }) {
 
   if (loading) return <p>Cargando caja…</p>
 
-  // SI NO HAY CAJA ABIERTA
   if (!session) {
     return (
       <div style={{ padding: 40 }}>
+
+        {message && (
+          <div style={{
+            background:"#222",
+            color:"white",
+            padding:10,
+            marginBottom:15
+          }}>
+            {message}
+          </div>
+        )}
 
         <h2>Apertura de caja</h2>
 
@@ -132,14 +147,14 @@ export default function CashSession({ profile }) {
           onChange={e => setOpening(e.target.value)}
         />
 
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop:10 }}>
 
           <button onClick={openCash}>
             Abrir caja
           </button>
 
           <button
-            style={{ marginLeft: 10 }}
+            style={{ marginLeft:10 }}
             onClick={logout}
           >
             Salir
@@ -154,63 +169,60 @@ export default function CashSession({ profile }) {
   return (
     <div>
 
-      {/* BARRA SUPERIOR */}
+      {message && (
+        <div style={{
+          background:"#222",
+          color:"white",
+          padding:10
+        }}>
+          {message}
+        </div>
+      )}
+
       <div style={{
-        background: "#111",
-        color: "white",
-        padding: 12,
-        display: "flex",
-        justifyContent: "space-between"
+        background:"#111",
+        padding:10,
+        display:"flex",
+        justifyContent:"flex-end"
       }}>
 
-        <div>
-          Caja abierta — Inicio S/ {session.opening_amount}
-        </div>
+        <button
+          onClick={() => setShowClose(true)}
+        >
+          Cerrar turno
+        </button>
 
-        <div>
-
-          <button
-            onClick={() => setShowClose(true)}
-          >
-            Cerrar turno
-          </button>
-
-          <button
-            style={{ marginLeft: 10 }}
-            onClick={logout}
-          >
-            Salir
-          </button>
-
-        </div>
+        <button
+          style={{ marginLeft:10 }}
+          onClick={logout}
+        >
+          Salir
+        </button>
 
       </div>
 
-      {/* POS */}
       <Sales
         profile={profile}
         sessionId={session.id}
       />
 
-      {/* MODAL CIERRE */}
       {showClose && (
 
         <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.6)",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center"
+          position:"fixed",
+          top:0,
+          left:0,
+          right:0,
+          bottom:0,
+          background:"rgba(0,0,0,0.5)",
+          display:"flex",
+          justifyContent:"center",
+          alignItems:"center"
         }}>
 
           <div style={{
-            background: "white",
-            padding: 30,
-            minWidth: 300
+            background:"white",
+            padding:30
           }}>
 
             <h3>Cierre de caja</h3>
@@ -224,14 +236,14 @@ export default function CashSession({ profile }) {
               }
             />
 
-            <div style={{ marginTop: 15 }}>
+            <div style={{ marginTop:15 }}>
 
               <button onClick={closeCash}>
-                Confirmar cierre
+                Confirmar
               </button>
 
               <button
-                style={{ marginLeft: 10 }}
+                style={{ marginLeft:10 }}
                 onClick={() =>
                   setShowClose(false)
                 }
