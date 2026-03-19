@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
 import Sales from "./Sales"
 
@@ -6,162 +6,143 @@ export default function CashSession({ profile }) {
 
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
-
-  const [opening, setOpening] = useState("")
-  const [showClose, setShowClose] = useState(false)
-  const [closingAmount, setClosingAmount] = useState("")
-
-  const [message, setMessage] = useState(null)
+  const [openingAmount, setOpeningAmount] = useState("")
+  const [showOpen, setShowOpen] = useState(false)
+  const [confirmClose, setConfirmClose] = useState(false)
 
   useEffect(() => {
     loadSession()
   }, [])
 
-  function showMessage(text) {
-    setMessage(text)
-    setTimeout(() => setMessage(null), 4000)
-  }
-
   async function loadSession() {
-
-    if (!profile?.id) {
-      setLoading(false)
-      return
-    }
 
     const { data } = await supabase
       .from("cash_sessions")
       .select("*")
-      .eq("opened_by", profile.id)
+      .eq("opened_by", profile?.id)
       .eq("status", "open")
       .maybeSingle()
 
-    setSession(data || null)
+    if (!data) {
+      setShowOpen(true)
+    } else {
+      setSession(data)
+    }
+
     setLoading(false)
   }
 
-  async function openCash() {
-
-    if (!opening) {
-      showMessage("Ingrese monto inicial")
-      return
-    }
+  async function openSession() {
 
     const { data, error } = await supabase
       .from("cash_sessions")
       .insert({
-        opened_by: profile.id,
-        opening_amount: Number(opening),
+        opened_by: profile?.id,
+        opening_amount: Number(openingAmount),
         status: "open"
       })
       .select()
       .single()
 
     if (error) {
-      showMessage("Error al abrir caja")
-      return
+      console.log(error)
+      return alert("Error al abrir caja")
     }
 
     setSession(data)
-    showMessage("Caja abierta correctamente")
+    setShowOpen(false)
   }
 
-  async function closeCash() {
+  async function closeSession() {
 
-    if (!closingAmount) {
-      showMessage("Ingrese dinero contado")
-      return
-    }
+    if (!session) return
 
-    const { data: sales } = await supabase
-      .from("sales")
-      .select("total,payment_method")
-      .eq("session_id", session.id)
-
-    let efectivo = 0
-
-    sales?.forEach(s => {
-      if (s.payment_method === "efectivo")
-        efectivo += Number(s.total)
-    })
-
-    const expected =
-      Number(session.opening_amount) + efectivo
-
-    const diff =
-      Number(closingAmount) - expected
-
-    const { error } = await supabase
+    await supabase
       .from("cash_sessions")
       .update({
-        closing_amount: Number(closingAmount),
-        expected_amount: expected,
-        difference: diff,
         status: "closed",
         closed_at: new Date()
       })
       .eq("id", session.id)
 
-    if (error) {
-      showMessage("Error al cerrar caja")
-      return
-    }
-
-    showMessage(
-      `Turno cerrado — Esperado S/${expected} | Contado S/${closingAmount} | Dif S/${diff}`
-    )
-
     setSession(null)
-    setShowClose(false)
-    setClosingAmount("")
+    setShowOpen(true)
   }
 
   async function logout() {
     await supabase.auth.signOut()
-    location.reload()
+    window.location.reload()
   }
 
-  if (loading) return <p>Cargando caja…</p>
+  // 🔥 TECLADO GLOBAL
+  useEffect(() => {
 
-  if (!session) {
+    function handleKeys(e) {
+
+      // abrir caja
+      if (showOpen && e.key === "Enter") {
+        openSession()
+      }
+
+      // escribir monto
+      if (showOpen && !isNaN(e.key)) {
+        setOpeningAmount(prev => prev + e.key)
+      }
+
+      if (showOpen && e.key === "Backspace") {
+        setOpeningAmount(prev => prev.slice(0, -1))
+      }
+
+      // cerrar turno
+      if (e.key === "F8") {
+        setConfirmClose(true)
+      }
+
+      // salir
+      if (e.key === "F10") {
+        logout()
+      }
+
+      // confirmar cierre
+      if (confirmClose) {
+
+        if (e.key === "Enter") {
+          closeSession()
+          setConfirmClose(false)
+        }
+
+        if (e.key === "Escape") {
+          setConfirmClose(false)
+        }
+      }
+
+    }
+
+    window.addEventListener("keydown", handleKeys)
+
+    return () =>
+      window.removeEventListener("keydown", handleKeys)
+
+  }, [showOpen, confirmClose, openingAmount, session])
+
+  if (loading) return <p>Cargando...</p>
+
+  // 🔥 PANTALLA ABRIR CAJA
+  if (showOpen) {
     return (
-      <div style={{ padding: 40 }}>
-
-        {message && (
-          <div style={{
-            background:"#222",
-            color:"white",
-            padding:10,
-            marginBottom:15
-          }}>
-            {message}
-          </div>
-        )}
-
-        <h2>Apertura de caja</h2>
-
-        <input
-          type="number"
-          placeholder="Monto inicial"
-          value={opening}
-          onChange={e => setOpening(e.target.value)}
-        />
-
-        <div style={{ marginTop:10 }}>
-
-          <button onClick={openCash}>
-            Abrir caja
-          </button>
-
-          <button
-            style={{ marginLeft:10 }}
-            onClick={logout}
-          >
-            Salir
-          </button>
-
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        height: "100vh",
+        fontSize: 24
+      }}>
+        <div>
+          <p>Apertura de caja</p>
+          <p>Monto inicial:</p>
+          <h2>S/ {openingAmount || 0}</h2>
+          <p>ENTER para abrir</p>
         </div>
-
       </div>
     )
   }
@@ -169,94 +150,26 @@ export default function CashSession({ profile }) {
   return (
     <div>
 
-      {message && (
-        <div style={{
-          background:"#222",
-          color:"white",
-          padding:10
-        }}>
-          {message}
-        </div>
-      )}
-
-      <div style={{
-        background:"#111",
-        padding:10,
-        display:"flex",
-        justifyContent:"flex-end"
-      }}>
-
-        <button
-          onClick={() => setShowClose(true)}
-        >
-          Cerrar turno
-        </button>
-
-        <button
-          style={{ marginLeft:10 }}
-          onClick={logout}
-        >
-          Salir
-        </button>
-
-      </div>
-
+      {/* CAJA */}
       <Sales
         profile={profile}
-        sessionId={session.id}
+        sessionId={session?.id}
       />
 
-      {showClose && (
-
+      {/* CONFIRMACIÓN CIERRE */}
+      {confirmClose && (
         <div style={{
-          position:"fixed",
-          top:0,
-          left:0,
-          right:0,
-          bottom:0,
-          background:"rgba(0,0,0,0.5)",
-          display:"flex",
-          justifyContent:"center",
-          alignItems:"center"
+          position: "fixed",
+          top: "40%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          background: "#111",
+          color: "#fff",
+          padding: 20,
+          borderRadius: 10
         }}>
-
-          <div style={{
-            background:"white",
-            padding:30
-          }}>
-
-            <h3>Cierre de caja</h3>
-
-            <input
-              type="number"
-              placeholder="Dinero contado"
-              value={closingAmount}
-              onChange={e =>
-                setClosingAmount(e.target.value)
-              }
-            />
-
-            <div style={{ marginTop:15 }}>
-
-              <button onClick={closeCash}>
-                Confirmar
-              </button>
-
-              <button
-                style={{ marginLeft:10 }}
-                onClick={() =>
-                  setShowClose(false)
-                }
-              >
-                Cancelar
-              </button>
-
-            </div>
-
-          </div>
-
+          Cerrar turno? ENTER = Sí / ESC = No
         </div>
-
       )}
 
     </div>
