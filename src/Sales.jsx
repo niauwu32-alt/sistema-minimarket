@@ -109,14 +109,14 @@ export default function Sales({ profile, sessionId }) {
     0
   )
 
-  // ⌨️ TECLADO PRO
+  // ⌨️ TECLADO PRO (sin usar Enter para cantidades)
   useEffect(() => {
 
     function handleKeys(e) {
 
       if (cart.length === 0) return
 
-      // mover selección
+      // moverse
       if (e.key === "ArrowDown") {
         setSelectedCartIndex(i =>
           Math.min(i + 1, cart.length - 1)
@@ -132,12 +132,12 @@ export default function Sales({ profile, sessionId }) {
       const item = cart[selectedCartIndex]
       if (!item) return
 
-      // ENTER (sin escribir) → sumar
-      if (e.key === "Enter" && barcode === "") {
+      // + aumentar (soporta teclado normal)
+      if (e.key === "+" || e.key === "=") {
         changeQty(item.id, 1)
       }
 
-      // -
+      // - disminuir
       if (e.key === "-") {
         changeQty(item.id, -1)
       }
@@ -147,7 +147,7 @@ export default function Sales({ profile, sessionId }) {
         removeProduct(item.id)
       }
 
-      // limpiar todo
+      // limpiar carrito
       if (e.key === "F4") {
         setCart([])
       }
@@ -164,7 +164,7 @@ export default function Sales({ profile, sessionId }) {
     return () =>
       window.removeEventListener("keydown", handleKeys)
 
-  }, [cart, selectedCartIndex, barcode])
+  }, [cart, selectedCartIndex])
 
   // 💳 FINALIZAR VENTA
   async function finalizeSale() {
@@ -316,9 +316,11 @@ export default function Sales({ profile, sessionId }) {
                 justifyContent: "space-between",
                 padding: 10,
                 borderBottom: "1px solid #eee",
-                background: index === selectedCartIndex ? "#d0ebff" : "#fff",
-                border: index === selectedCartIndex ? "2px solid #339af0" : "none",
-                borderRadius: 6
+                background: index === selectedCartIndex ? "#f8f9fa" : "#fff",
+                borderLeft: index === selectedCartIndex
+                  ? "5px solid #339af0"
+                  : "5px solid transparent",
+                borderRadius: 4
               }}
             >
               <div>
@@ -329,8 +331,13 @@ export default function Sales({ profile, sessionId }) {
 
               <div>
                 <button onClick={() => changeQty(item.id, -1)}>-</button>
-                {item.quantity}
+
+                <span style={{ margin: "0 10px" }}>
+                  {item.quantity}
+                </span>
+
                 <button onClick={() => changeQty(item.id, 1)}>+</button>
+
                 <button onClick={() => removeProduct(item.id)}>X</button>
               </div>
             </div>
